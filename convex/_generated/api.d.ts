@@ -9,6 +9,7 @@
  */
 
 import type * as coins from "../coins.js";
+import type * as constants_coinRules from "../constants/coinRules.js";
 import type * as courses from "../courses.js";
 import type * as crons from "../crons.js";
 import type * as gamification from "../gamification.js";
@@ -27,6 +28,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   coins: typeof coins;
+  "constants/coinRules": typeof constants_coinRules;
   courses: typeof courses;
   crons: typeof crons;
   gamification: typeof gamification;
