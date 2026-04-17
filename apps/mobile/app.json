@@ -8,6 +8,10 @@
     "scheme": "mobile",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "CONVEX_URL": "https://limitless-ermine-877.convex.cloud",
+      "CLERK_PUBLISHABLE_KEY": "pk_test_Y3J1Y2lhbC1pbnNlY3QtOTcuY2xlcmsuYWNjb3VudHMuZGV2JA"
+    },
     "ios": {
       "supportsTablet": true
     },
