@@ -40,7 +40,9 @@ export default defineSchema({
         })
       )
     ),
-  }).index('by_course', ['courseId']),
+  })
+    .index('by_course', ['courseId'])
+    .index('by_course_order', ['courseId', 'order']),
 
   enrollments: defineTable({
     userId: v.id('users'),
@@ -50,6 +52,7 @@ export default defineSchema({
     coinRewarded: v.boolean(),
   })
     .index('by_user', ['userId'])
+    .index('by_course', ['courseId'])
     .index('by_user_course', ['userId', 'courseId']),
 
   progress: defineTable({
@@ -75,9 +78,12 @@ export default defineSchema({
     ),
     courseId: v.optional(v.id('courses')),
     expiresAt: v.optional(v.number()),
+    isExpired: v.boolean(),
     note: v.string(),
     createdAt: v.number(),
-  }).index('by_user', ['userId']),
+  })
+    .index('by_user', ['userId'])
+    .index('by_expires', ['expiresAt']),
 
   payments: defineTable({
     userId: v.id('users'),
