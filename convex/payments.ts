@@ -17,7 +17,7 @@ export const create = mutation({
     userId: v.id('users'),
     courseId: v.id('courses'),
     amount: v.number(),
-    midtransOrderId: v.string(),
+    gatewayOrderId: v.string(),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert('payments', {
@@ -25,27 +25,38 @@ export const create = mutation({
       courseId: args.courseId,
       amount: args.amount,
       status: 'pending',
-      midtransOrderId: args.midtransOrderId,
+      gatewayOrderId: args.gatewayOrderId,
       createdAt: Date.now(),
     });
   },
 });
 
+export const getPaymentByOrder = query({
+  args: { gatewayOrderId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('payments')
+      .withIndex('by_gateway_order', (q) =>
+        q.eq('gatewayOrderId', args.gatewayOrderId)
+      )
+      .first();
+  },
+});
+
 export const updateStatus = mutation({
   args: {
-    midtransOrderId: v.string(),
+    gatewayOrderId: v.string(),
     status: v.union(
       v.literal('pending'),
       v.literal('success'),
       v.literal('failed')
     ),
-    midtransTransactionId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const payment = await ctx.db
       .query('payments')
-      .withIndex('by_midtrans_order', (q) =>
-        q.eq('midtransOrderId', args.midtransOrderId)
+      .withIndex('by_gateway_order', (q) =>
+        q.eq('gatewayOrderId', args.gatewayOrderId)
       )
       .first();
 
@@ -53,8 +64,7 @@ export const updateStatus = mutation({
 
     await ctx.db.patch(payment._id, {
       status: args.status,
-      midtransTransactionId: args.midtransTransactionId,
-      updatedAt: Date.now(),
+      paidAt: args.status === 'success' ? Date.now() : undefined,
     });
 
     return payment._id;

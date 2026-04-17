@@ -1,17 +1,8 @@
 import { v } from 'convex/values';
 import { mutation, query, internalMutation } from './_generated/server';
+import { internal } from './_generated/api';
 
-export const get = query({
-  args: { clerkId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query('users')
-      .withIndex('by_clerk_id', (q) => q.eq('clerkId', args.clerkId))
-      .first();
-  },
-});
-
-export const createOrUpdate = mutation({
+export const createUser = mutation({
   args: {
     clerkId: v.string(),
     name: v.string(),
@@ -24,23 +15,48 @@ export const createOrUpdate = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        name: args.name,
-        email: args.email,
-      });
       return existing._id;
     }
 
     return await ctx.db.insert('users', {
+      clerkId: args.clerkId,
       name: args.name,
       email: args.email,
-      clerkId: args.clerkId,
-      role: 'user',
+      coinBalance: 0,
       xp: 0,
       streak: 0,
-      coins: 0,
-      badges: [],
+      role: 'user',
     });
+  },
+});
+
+export const getCurrentUser = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_clerk_id', (q) => q.eq('clerkId', identity.subject))
+      .first();
+
+    return user;
+  },
+});
+
+export const getTopUsers = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const all = await ctx.db.query('users').collect();
+    const sorted = all.sort((a, b) => b.xp - a.xp).slice(0, args.limit || 10);
+
+    return sorted.map((u) => ({
+      _id: u._id,
+      name: u.name,
+      xp: u.xp,
+      streak: u.streak,
+    }));
   },
 });
 
@@ -76,6 +92,10 @@ export const updateStreak = mutation({
       lastActiveDate: today,
     });
 
+    if (newStreak > 0 && newStreak % 7 === 0) {
+      await internal.gamification.earnStreakBonus({ userId: args.userId });
+    }
+
     return newStreak;
   },
 });
@@ -104,6 +124,44 @@ export const resetWeeklyLeaderboard = internalMutation({
     const all = await ctx.db.query('users').collect();
     for (const u of all) {
       await ctx.db.patch(u._id, { xp: 0 });
+    }
+  },
+});
+
+export const expireOldCoins = internalMutation({
+  handler: async (ctx) => {
+    const now = Date.now();
+    const expired = await ctx.db
+      .query('coinTransactions')
+      .withIndex('by_expires', (q) => q.lt('expiresAt', now))
+      .filter((q) => q.eq(q.field('isExpired'), false))
+      .collect();
+
+    const userMap = new Map<any, number>();
+
+    for (const tx of expired) {
+      if (tx.amount > 0) {
+        const current = userMap.get(tx.userId) || 0;
+        userMap.set(tx.userId, current + tx.amount);
+      }
+      await ctx.db.patch(tx._id, { isExpired: true });
+    }
+
+    for (const [userId, expiringAmount] of userMap) {
+      const user = await ctx.db.get(userId);
+      if (!user) continue;
+
+      const newBalance = Math.max(0, user.coinBalance - expiringAmount);
+      await ctx.db.patch(userId, { coinBalance: newBalance });
+
+      await ctx.db.insert('coinTransactions', {
+        userId,
+        amount: -expiringAmount,
+        type: 'expired',
+        isExpired: false,
+        note: 'Expired coins',
+        createdAt: Date.now(),
+      });
     }
   },
 });

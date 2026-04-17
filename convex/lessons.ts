@@ -22,16 +22,17 @@ export const create = mutation({
   args: {
     courseId: v.id('courses'),
     title: v.string(),
-    description: v.string(),
     videoUrl: v.string(),
+    duration: v.number(),
     order: v.number(),
-    isFree: v.boolean(),
-    quiz: v.optional(
-      v.object({
-        question: v.string(),
-        options: v.array(v.string()),
-        correctAnswer: v.number(),
-      })
+    quizQuestions: v.optional(
+      v.array(
+        v.object({
+          question: v.string(),
+          options: v.array(v.string()),
+          correctIndex: v.number(),
+        })
+      )
     ),
   },
   handler: async (ctx, args) => {
