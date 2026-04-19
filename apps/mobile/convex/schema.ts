@@ -114,6 +114,7 @@ export default defineSchema({
     ),
     requestedAt: v.number(),
     processedAt: v.optional(v.number()),
+    rejectionReason: v.optional(v.string()),
   })
     .index('by_user', ['userId'])
     .index('by_status', ['status']),

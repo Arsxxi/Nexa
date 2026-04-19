@@ -122,11 +122,11 @@ export default function LoginScreen() {
           <View style={styles.inputContainer}>
             <View style={styles.labelRow}>
               <Text style={styles.label}>PASSWORD</Text>
-              <Link href="/(auth)/forgot-password" asChild>
+              {/* <Link href="/(auth)/forgot-password" asChild>
                 <TouchableOpacity>
                   <Text style={styles.resetText}>RESET?</Text>
                 </TouchableOpacity>
-              </Link>
+              </Link> */}
             </View>
             <TextInput
               style={[styles.input, error && error.includes('Password') && styles.inputError]}

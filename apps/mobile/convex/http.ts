@@ -150,7 +150,7 @@ http.route({
 
       const existingEnrollment = await (ctx as any).db
         .query('enrollments')
-        .withIndex('by_user_course', (q) =>
+        .withIndex('by_user_course', (q: any) =>
           q.eq('userId', userId).eq('courseId', courseId)
         )
         .first();

@@ -47,7 +47,58 @@ export const getCourses = query({
   },
 });
 
-export const getCourseById = query({
+export const getEnrolledCourses = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_clerk_id', (q) => q.eq('clerkId', identity.subject!))
+      .first();
+
+    if (!user) return [];
+
+    const enrollments = await ctx.db
+      .query('enrollments')
+      .withIndex('by_user', (q) => q.eq('userId', user._id))
+      .collect();
+
+    const courseIds = enrollments.map((e) => e.courseId);
+    const courses = await Promise.all(
+      courseIds.map((courseId) => ctx.db.get(courseId))
+    );
+
+    // Get progress for each course
+    const result = await Promise.all(
+      courses.filter(Boolean).map(async (course) => {
+        const progress = await ctx.db
+          .query('progress')
+          .withIndex('by_user_lesson', (q) =>
+            q.eq('userId', user._id)
+          )
+          .filter((q) => q.eq(q.field('isCompleted'), true))
+          .collect();
+
+        const totalLessons = course!.totalLessons;
+        const completedLessons = progress.length;
+        const percentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+
+        return {
+          ...course!,
+          progress: percentage,
+          completedLessons,
+          totalLessons,
+        };
+      })
+    );
+
+    return result;
+  },
+});
+
+export const getCourseDetails = query({
   args: { courseId: v.id('courses') },
   handler: async (ctx, args) => {
     const course = await ctx.db.get(args.courseId);

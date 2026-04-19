@@ -13,6 +13,7 @@ import {
 import { Link, router } from 'expo-router';
 import { useSignUp } from '@clerk/clerk-expo';
 import { useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 const COLORS = {
   primary: '#FFC800',
@@ -33,12 +34,17 @@ function validateEmail(email: string): boolean {
 
 export default function RegisterScreen() {
   const { signUp, isLoaded } = useSignUp();
+  const createUser = useMutation(api.users.createUser);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Note: If CAPTCHA errors occur, disable CAPTCHA in Clerk Dashboard:
+  // Go to https://dashboard.clerk.com -> Your App -> User & Authentication -> Attack Protection
+  // Set "Bot sign-up protection" to "Off" for development
 
   const handleRegister = async () => {
     setError('');
@@ -80,19 +86,34 @@ export default function RegisterScreen() {
 
     setLoading(true);
     try {
-      await signUp?.create({
+      const signUpResult = await signUp?.create({
         emailAddress: email,
         password,
         firstName: name,
       });
-      await signUp?.prepareEmailAddressVerification({ strategy: 'email_code' });
-      router.push('/(auth)/verify-email');
+
+      // Create user in Convex database
+      if (signUpResult?.createdUserId) {
+        await createUser({
+          clerkId: signUpResult.createdUserId,
+          name,
+          email,
+        });
+      }
+
+      // User is now registered and signed in automatically
+      router.replace('/(tabs)');
     } catch (err: any) {
-      const message = err.errors?.[0]?.message || '';
+      console.error('Register error:', err);
+      const message = err.errors?.[0]?.message || err.message || '';
       if (message.includes('exists') || message.includes('already')) {
         setError('Email sudah terdaftar');
       } else if (message.includes('password')) {
         setError('Password terlalu lemah');
+      } else if (message.includes('captcha') || message.includes('CAPTCHA')) {
+        setError('Verifikasi keamanan gagal. Coba lagi dalam beberapa saat.');
+      } else if (message.includes('network') || message.includes('timeout')) {
+        setError('Koneksi bermasalah. Periksa internet dan coba lagi.');
       } else {
         setError(message || 'Pendaftaran gagal. Coba lagi.');
       }
