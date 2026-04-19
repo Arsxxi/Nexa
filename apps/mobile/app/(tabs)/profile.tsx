@@ -1,7 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useUser, useClerk } from '@clerk/clerk-expo';
 import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { api } from '@convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 import { CoinBadge } from '@/components/CoinBadge';
 import { BadgeCard } from '@/components/BadgeCard';

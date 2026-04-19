@@ -1,5 +1,5 @@
 import { useQuery, useMutation } from 'convex/react';
-import { api } from '../convex/_generated/api';
+import { api } from '@convex/_generated/api';
 
 export function useCoin() {
   // Get current user for balance and to provide userId to mutations

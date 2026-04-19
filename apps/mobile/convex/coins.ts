@@ -1,5 +1,5 @@
 import { v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { mutation, query, internalQuery, internalMutation, action } from './_generated/server';
 import { COIN_RULES } from './constants/coinRules';
 
 // Helper: Verify caller is admin (check database role, not Clerk identity)
@@ -146,12 +146,17 @@ export const getAllRedeems = query({
           userEmail: user.email,
           coinAmount: request.coinAmount,
           rupiahAmount: request.rupiahAmount,
-          bankAccount: request.bankAccount,
+          bankCode: request.bankCode,
+          accountNumber: request.accountNumber,
+          accountHolderName: request.accountHolderName,
           bankName: request.bankName,
           status: request.status,
           requestedAt: request.requestedAt,
           processedAt: request.processedAt,
           rejectionReason: request.rejectionReason,
+          disburseReference: request.disburseReference,
+          disburseStatus: request.disburseStatus,
+          disburseError: request.disburseError,
         });
       }
     }
@@ -337,7 +342,9 @@ export const spendCoins = mutation({
 export const requestRedeem = mutation({
   args: {
     coinAmount: v.number(),
-    bankAccount: v.string(),
+    bankCode: v.string(),
+    accountNumber: v.string(),
+    accountHolderName: v.string(),
     bankName: v.string(),
   },
   returns: v.id('redeemRequests'),
@@ -398,7 +405,9 @@ export const requestRedeem = mutation({
       userId,
       coinAmount: args.coinAmount,
       rupiahAmount,
-      bankAccount: args.bankAccount,
+      bankCode: args.bankCode,
+      accountNumber: args.accountNumber,
+      accountHolderName: args.accountHolderName,
       bankName: args.bankName,
       status: 'pending',
       requestedAt: Date.now(),
@@ -417,7 +426,7 @@ export const requestRedeem = mutation({
   },
 });
 
-export const processRedeem = mutation({
+export const processRedeem = action({
   args: {
     redeemId: v.id('redeemRequests'),
     status: v.union(v.literal('approved'), v.literal('rejected')),
@@ -445,7 +454,30 @@ export const processRedeem = mutation({
       rejectionReason: args.rejectionReason,
     });
 
-    if (args.status === 'rejected') {
+    if (args.status === 'approved') {
+      // Calculate payout amount (coins / rate * 1000)
+      const payoutAmount = Math.floor((request.coinAmount / COIN_RULES.RATE) * 1000);
+
+      // Call Midtrans disburse
+      try {
+        await ctx.runAction('payments:createDisburseOrder', {
+          userId: request.userId,
+          redeemId: args.redeemId,
+          amount: payoutAmount,
+          bankCode: request.bankCode,
+          accountNumber: request.accountNumber,
+          accountHolderName: request.accountHolderName,
+        });
+      } catch (error) {
+        console.error('Disburse failed:', error);
+        // Mark as approved but disburse failed
+        await ctx.db.patch(args.redeemId, {
+          disburseStatus: 'failed',
+          disburseError: error.message,
+        });
+        throw new Error(`Redeem approved but payout failed: ${error.message}`);
+      }
+    } else if (args.status === 'rejected') {
       const user = await ctx.db.get(request.userId);
       if (user) {
         const newBalance = user.coinBalance + request.coinAmount;
@@ -463,5 +495,38 @@ export const processRedeem = mutation({
     }
 
     return args.redeemId;
+  },
+});
+
+// Reset coin balance to 0 (for testing/admin purposes)
+export const resetCoinBalance = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Unauthorized');
+    
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_clerk_id', (q: any) => q.eq('clerkId', identity.subject!))
+      .first();
+    
+    if (!user) throw new Error('User not found');
+
+    // Reset balance to 0
+    await ctx.db.patch(user._id, {
+      coinBalance: 0,
+    });
+
+    // Record transaction for audit trail
+    await ctx.db.insert('coinTransactions', {
+      userId: user._id,
+      amount: -user.coinBalance, // Negative amount to show reset
+      type: 'admin_reset',
+      note: 'Coin balance reset to 0',
+      createdAt: Date.now(),
+      isExpired: false,
+    });
+
+    return 0;
   },
 });

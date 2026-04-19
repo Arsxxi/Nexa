@@ -13,7 +13,7 @@ import {
 import { Link, router } from 'expo-router';
 import { useSignUp } from '@clerk/clerk-expo';
 import { useMutation } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { api } from '@convex/_generated/api';
 
 const COLORS = {
   primary: '#FFC800',

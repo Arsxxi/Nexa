@@ -5,7 +5,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"],
-      "@convex/*": ["../convex/*"]
+      "@convex/*": ["./convex/*"]
     }
   },
   "include": [
@@ -14,6 +14,6 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "convex.d.ts",
-    "../convex/**/*.ts"
+    "convex/**/*.ts"
   ]
 }

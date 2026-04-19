@@ -11,17 +11,12 @@ interface RedeemRequest {
   userEmail: string;
   coinAmount: number;
   rupiahAmount: number;
-  bankCode: string;
-  accountNumber: string;
-  accountHolderName: string;
+  bankAccount: string;
   bankName: string;
   status: 'pending' | 'approved' | 'rejected';
   requestedAt: number;
   processedAt?: number;
   rejectionReason?: string;
-  disburseReference?: string;
-  disburseStatus?: string;
-  disburseError?: string;
 }
 
 export default function RequestDetailScreen() {
@@ -89,8 +84,7 @@ export default function RequestDetailScreen() {
           <Text style={styles.cardLabel}>TUJUAN TRANSFER</Text>
           <View style={styles.bankBox}>
             <Text style={styles.bankName}>{request.bankName}</Text>
-            <Text style={styles.bankRekening}>{request.accountNumber}</Text>
-            <Text style={styles.bankName}>{request.accountHolderName}</Text>
+            <Text style={styles.bankRekening}>{request.bankAccount}</Text>
             <Text style={styles.bankOwner}>A.N. {request.userName.toUpperCase()}</Text>
           </View>
         </View>
@@ -132,13 +126,13 @@ export default function RequestDetailScreen() {
         <View style={styles.bottomActions}>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#FEE2E2' }]}
-            onPress={() => router.push(`/redeem/reject/${id}`)}
+            onPress={() => router.push(`/admin/redeem/reject/${id}`)}
           >
             <Text style={[styles.actionText, { color: '#991B1B' }]}>✕ REJECT</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.actionBtn, { backgroundColor: '#FFC800' }]}
-            onPress={() => router.push(`/redeem/approve/${id}`)}
+            onPress={() => router.push(`/admin/redeem/approve/${id}`)}
           >
             <Text style={styles.actionText}>✓ APPROVE</Text>
           </TouchableOpacity>
@@ -160,8 +154,6 @@ const styles = StyleSheet.create({
   scrollContent: { padding: 24, paddingBottom: 100 },
   topSection: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
   reqId: { fontSize: 24, fontWeight: '800', color: '#18181B' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { fontSize: 16, color: '#6b7280' },
   
   card: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#E4E4E7', marginBottom: 16 },
   cardLabel: { fontSize: 10, fontWeight: '700', color: '#A1A1AA', letterSpacing: 1.5, marginBottom: 16 },
