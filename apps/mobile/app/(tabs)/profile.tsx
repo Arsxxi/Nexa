@@ -1,5 +1,7 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useUser, useClerk } from '@clerk/clerk-expo';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 import { CoinBadge } from '@/components/CoinBadge';
 import { BadgeCard } from '@/components/BadgeCard';
@@ -7,11 +9,12 @@ import { BadgeCard } from '@/components/BadgeCard';
 export default function ProfileScreen() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const userData = useQuery(api.users.getCurrentUser);
 
   const stats = {
-    xp: 1250,
-    streak: 7,
-    coursesCompleted: 3,
+    xp: userData?.xp || 0,
+    streak: userData?.streak || 0,
+    coursesCompleted: 0, // TODO: Calculate from progress
     badges: [
       { id: '1', name: 'First Steps', icon: '🎯', description: 'Complete your first lesson' },
       { id: '2', name: 'Week Warrior', icon: '🔥', description: '7-day streak' },
