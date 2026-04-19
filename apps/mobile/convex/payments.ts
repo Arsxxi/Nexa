@@ -246,3 +246,64 @@ export const getPaymentStatus = action({
     };
   },
 });
+
+export const createDisburseOrder = action({
+  args: {
+    userId: v.id('users'),
+    redeemId: v.id('redeemRequests'),
+    amount: v.number(),
+    bankCode: v.string(),
+    accountNumber: v.string(),
+    accountHolderName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user = await (ctx as any).db.get(args.userId);
+    if (!user) throw new Error('User not found');
+
+    const timestamp = Date.now();
+    const referenceNo = `REDEEM-${args.redeemId}-${timestamp}`;
+
+    // Midtrans Iris API for disbursements
+    const irisBaseUrl = 'https://app.sandbox.midtrans.com/iris/api/v1';
+    const irisApiKey = process.env.MIDTRANS_IRIS_API_KEY || MIDTRANS_SERVER_KEY; // May need separate key
+
+    const disburseBody = {
+      reference_no: referenceNo,
+      beneficiary_name: args.accountHolderName,
+      beneficiary_account: args.accountNumber,
+      beneficiary_bank: args.bankCode,
+      beneficiary_email: user.email,
+      amount: args.amount.toString(),
+      notes: `Coin redemption payout for ${user.name}`,
+    };
+
+    const response = await fetch(`${irisBaseUrl}/disburse`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${base64Encode(irisApiKey + ':')}`,
+      },
+      body: JSON.stringify(disburseBody),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Midtrans Iris disburse error: ${errorText}`);
+    }
+
+    const responseData = await response.json();
+
+    // Update redeem request with disburse info
+    await (ctx as any).db.patch(args.redeemId, {
+      disburseReference: referenceNo,
+      disburseStatus: 'pending',
+      disbursedAt: Date.now(),
+    });
+
+    return {
+      referenceNo,
+      status: responseData.status,
+      fee: responseData.fee,
+    };
+  },
+});

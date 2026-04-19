@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import { api } from '@convex/_generated/api';
 import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 
 function Loading() {

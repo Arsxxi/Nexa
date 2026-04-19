@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCoin } from '@/hooks/useCoin';
+import { useMutation } from 'convex/react';
+import { api } from '@convex/_generated/api';
 
 type FilterType = 'SEMUA' | 'MASUK' | 'KELUAR';
 
@@ -10,9 +12,32 @@ export default function WalletTabScreen() {
   const router = useRouter();
   const { balance, transactions, loading } = useCoin();
   const [filter, setFilter] = useState<FilterType>('SEMUA');
+  const resetCoinBalance = useMutation(api.coins.resetCoinBalance);
 
   const formatNumber = (num: number) => {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  };
+
+  const handleResetBalance = async () => {
+    Alert.alert(
+      'Reset Saldo',
+      'Apakah Anda yakin ingin mereset saldo koin menjadi 0? Tindakan ini tidak dapat dibatalkan.',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await resetCoinBalance();
+              Alert.alert('Berhasil', 'Saldo koin telah direset menjadi 0');
+            } catch (error) {
+              Alert.alert('Error', 'Gagal mereset saldo');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const filteredTransactions = transactions?.filter((tx) => {
@@ -29,7 +54,7 @@ export default function WalletTabScreen() {
     );
   }
 
-  const currentBalance = balance || 1250;
+  const currentBalance = balance || 0;
   const fiatEquivalent = currentBalance * 10;
 
   return (
@@ -49,6 +74,10 @@ export default function WalletTabScreen() {
             <Text style={styles.historyBtnText}>RIWAYAT</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity style={styles.resetBtn} onPress={handleResetBalance}>
+          <Text style={styles.resetBtnText}>Reset Saldo (Debug)</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.sectionLabel}>KURS KONVERSI</Text>
@@ -202,6 +231,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 14,
     letterSpacing: 0.5,
+  },
+  resetBtn: {
+    marginTop: 12,
+    alignSelf: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  resetBtnText: {
+    color: '#71717A',
+    fontSize: 12,
+    textDecorationLine: 'underline',
   },
 
   sectionLabel: {

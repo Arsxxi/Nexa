@@ -1,33 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-
-// --- MOCK DATA ---
-const MOCK_LEARNING = [
-  { id: 'c1', title: 'Kubernetes Fundament...', tag: 'DEVOPS', totalLessons: 8, completedLessons: 3, progressText: '37%', image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb' },
-  { id: 'c2', title: 'Zero Trust Architecture', tag: 'SECURITY', totalLessons: 8, completedLessons: 5, progressText: '62%', image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb' },
-  { id: 'c3', title: 'Machinist UI Patterns', tag: 'DESIGN SYSTEMS', totalLessons: 8, completedLessons: 8, progressText: 'SELESAI ✓', image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb', isDone: true },
-];
-
-const MOCK_COMPLETED = [
-  { id: 'c4', title: 'Advanced CSS Architecture', meta: '8 LESSON • 4 JAM', coinEarned: 500, image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb' },
-  { id: 'c5', title: 'Intro to Machine Learning', meta: '12 LESSON • 6 JAM', coinEarned: 750, image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb' },
-  { id: 'c6', title: 'UI/UX Systems Design', meta: '10 LESSON • 5 JAM', coinEarned: 600, image: 'https://via.placeholder.com/150/000000/FFFFFF?text=Thumb' },
-];
+import { useQuery } from 'convex/react';
+import { api } from '@convex/_generated/api';
 
 export default function MyCoursesScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'LEARNING' | 'COMPLETED'>('LEARNING');
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Simulasi fetch data dari Convex
-  useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1500); // Tampil loading 1.5 detik
-    return () => clearTimeout(timer);
-  }, []);
+  const enrolledCourses = useQuery(api.courses.getEnrolledCourses);
+  const currentUser = useQuery(api.users.getCurrentUser);
+
+  const isLoading = enrolledCourses === undefined;
+  const courses = enrolledCourses || [];
+  
+  const learningCourses = courses.filter((c: any) => !c.completedAt);
+  const completedCourses = courses.filter((c: any) => c.completedAt);
+
+  const displayCourses = activeTab === 'LEARNING' ? learningCourses : completedCourses;
 
   // --- COMPONENTS ---
 
@@ -43,7 +33,7 @@ export default function MyCoursesScreen() {
         </View>
       </View>
       <View style={styles.coinBadge}>
-        <Text style={styles.coinText}>🪙 500_CR</Text>
+        <Text style={styles.coinText}>🪙 {currentUser?.coinBalance || 0}_CR</Text>
       </View>
     </View>
   );
@@ -95,31 +85,31 @@ export default function MyCoursesScreen() {
     </View>
   );
 
-  const RenderLearningCard = ({ item }: { item: typeof MOCK_LEARNING[0] }) => {
-    // Generate segmented progress bar
-    const segments = Array.from({ length: item.totalLessons });
+  const RenderLearningCard = ({ item }: { item: any }) => {
+    const progressPercent = item.totalLessons > 0 ? Math.round((item.completedLessons || 0) / item.totalLessons * 100) : 0;
+    const segments = Array.from({ length: item.totalLessons || 1 });
     return (
-      <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item.id}`)}>
-        <Image source={{ uri: item.image }} style={styles.cardImage} />
+      <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)}>
+        <View style={styles.cardImage} />
         <View style={styles.cardContent}>
-          <View style={styles.tagBox}><Text style={styles.tagText}>{item.tag}</Text></View>
+          <View style={styles.tagBox}><Text style={styles.tagText}>{item.category?.toUpperCase()}</Text></View>
           <Text style={styles.courseTitle} numberOfLines={1}>{item.title}</Text>
           
-          {item.isDone ? (
-            <Text style={styles.doneText}>{item.progressText}</Text>
+          {item.completedAt ? (
+            <Text style={styles.doneText}>SELESAI ✓</Text>
           ) : (
-            <Text style={styles.progressText}>{item.completedLessons}/{item.totalLessons} · {item.progressText}</Text>
+            <Text style={styles.progressText}>{item.completedLessons || 0}/{item.totalLessons} · {progressPercent}%</Text>
           )}
 
           <View style={styles.progressBarContainer}>
             {segments.map((_, index) => {
-              const isCompleted = index < item.completedLessons;
+              const isCompleted = index < (item.completedLessons || 0);
               return (
                 <View 
                   key={index} 
                   style={[
                     styles.progressSegment, 
-                    { backgroundColor: isCompleted ? '#8A6D3B' : '#E4E4E7' } // Warna emas kecoklatan untuk progress
+                    { backgroundColor: isCompleted ? '#8A6D3B' : '#E4E4E7' }
                   ]} 
                 />
               );
@@ -130,12 +120,12 @@ export default function MyCoursesScreen() {
     );
   };
 
-  const RenderCompletedCard = ({ item }: { item: typeof MOCK_COMPLETED[0] }) => (
-    <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item.id}`)}>
-      <Image source={{ uri: item.image }} style={styles.cardImage} />
+  const RenderCompletedCard = ({ item }: { item: any }) => (
+    <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)}>
+      <View style={styles.cardImage} />
       <View style={styles.cardContent}>
         <Text style={styles.courseTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.metaText}>{item.meta}</Text>
+        <Text style={styles.metaText}>{item.totalLessons} LESSON</Text>
         
         <View style={styles.badgeRow}>
           <View style={styles.badgeSertifikat}>
@@ -145,14 +135,11 @@ export default function MyCoursesScreen() {
         </View>
 
         <View style={styles.badgeCoin}>
-          <Text style={styles.badgeCoinText}>🪙 {item.coinEarned} DIPEROLEH</Text>
+          <Text style={styles.badgeCoinText}>🪙 {item.coinReward || 0} DIPEROLEH</Text>
         </View>
       </View>
     </TouchableOpacity>
   );
-
-  // --- MAIN RENDER ---
-  const currentData = activeTab === 'LEARNING' ? MOCK_LEARNING : MOCK_COMPLETED;
 
   return (
     <View style={styles.container}>
@@ -163,18 +150,18 @@ export default function MyCoursesScreen() {
       ) : (
         <>
           <Tabs />
-          {currentData.length === 0 ? (
+          {displayCourses.length === 0 ? (
             <RenderEmpty />
           ) : (
             <FlatList
-              data={currentData}
-              keyExtractor={(item) => item.id}
+              data={displayCourses}
+              keyExtractor={(item: any) => item._id}
               contentContainerStyle={styles.listContent}
               renderItem={({ item }) => {
                 if (activeTab === 'LEARNING') {
-                  return <RenderLearningCard item={item as typeof MOCK_LEARNING[0]} />;
+                  return <RenderLearningCard item={item} />;
                 } else {
-                  return <RenderCompletedCard item={item as typeof MOCK_COMPLETED[0]} />;
+                  return <RenderCompletedCard item={item} />;
                 }
               }}
             />

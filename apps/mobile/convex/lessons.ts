@@ -4,10 +4,22 @@ import { mutation, query } from './_generated/server';
 export const getByCourse = query({
   args: { courseId: v.id('courses') },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const lessons = await ctx.db
       .query('lessons')
       .withIndex('by_course', (q) => q.eq('courseId', args.courseId))
       .collect();
+    return lessons.sort((a, b) => a.order - b.order);
+  },
+});
+
+export const getLessonsByCourse = query({
+  args: { courseId: v.id('courses') },
+  handler: async (ctx, args) => {
+    const lessons = await ctx.db
+      .query('lessons')
+      .withIndex('by_course', (q) => q.eq('courseId', args.courseId))
+      .collect();
+    return lessons.sort((a, b) => a.order - b.order);
   },
 });
 
