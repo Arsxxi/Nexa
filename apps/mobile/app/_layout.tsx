@@ -1,5 +1,6 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ConvexClerkProvider } from '../app_providers';
 import { useAuth } from '@clerk/clerk-expo';
 import { useEffect } from 'react';
@@ -50,12 +51,14 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
-    <ConvexClerkProvider>
-      <AuthGuard>
-        <View style={{ flex: 1 }}>
-          <Slot />
-        </View>
-      </AuthGuard>
-    </ConvexClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ConvexClerkProvider>
+        <AuthGuard>
+          <View style={{ flex: 1 }}>
+            <Slot />
+          </View>
+        </AuthGuard>
+      </ConvexClerkProvider>
+    </GestureHandlerRootView>
   );
 }

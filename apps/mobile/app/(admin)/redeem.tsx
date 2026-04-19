@@ -3,8 +3,8 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, RefreshContr
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from 'convex/react';
 import { useRouter } from 'expo-router';
-import { api } from '../../convex/_generated/api';
-import { Id } from '../../convex/_generated/dataModel';
+import { api } from '@convex/_generated/api';
+import { Id } from '@convex/_generated/dataModel';
 import { StatusBadge } from '../../components/admin/StatusBadge';
 
 interface RedeemRequest {
@@ -14,12 +14,17 @@ interface RedeemRequest {
   userEmail: string;
   coinAmount: number;
   rupiahAmount: number;
-  bankAccount: string;
+  bankCode: string;
+  accountNumber: string;
+  accountHolderName: string;
   bankName: string;
   status: 'pending' | 'approved' | 'rejected';
   requestedAt: number;
   processedAt?: number;
   rejectionReason?: string;
+  disburseReference?: string;
+  disburseStatus?: string;
+  disburseError?: string;
 }
 
 type TabType = 'all' | 'pending' | 'approved' | 'rejected';
@@ -111,7 +116,7 @@ export default function RedeemAdminScreen() {
       <View style={styles.bankInfo}>
         <Ionicons name="card" size={16} color="#6b7280" />
         <Text style={styles.bankText}>
-          {item.bankName} - {item.bankAccount}
+          {item.bankName} - {item.accountNumber} ({item.accountHolderName})
         </Text>
       </View>
 

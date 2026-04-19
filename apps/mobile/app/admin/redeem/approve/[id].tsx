@@ -59,8 +59,8 @@ export default function ApproveModal() {
 
           <Text style={styles.summaryLabel}>TUJUAN TRANSFER</Text>
           <Text style={styles.summaryDetail}>BANK: {request.bankName}</Text>
-          <Text style={styles.summaryDetail}>NO. REK: {request.bankAccount}</Text>
-          <Text style={styles.summaryDetail}>NAMA: {request.userName.toUpperCase()}</Text>
+          <Text style={styles.summaryDetail}>NO. REK: {request.accountNumber}</Text>
+          <Text style={styles.summaryDetail}>NAMA: {request.accountHolderName}</Text>
         </View>
 
         <TouchableOpacity style={styles.btnConfirm} onPress={handleApprove}>

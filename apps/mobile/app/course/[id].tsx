@@ -1,38 +1,45 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '@convex/_generated/api';
 import { ProgressBar } from '@/components/ProgressBar';
 
 export default function CourseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [course, setCourse] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // TODO: Replace with Convex query
-    setCourse({
-      _id: id,
-      title: 'React Native Basics',
-      description: 'Learn the fundamentals of React Native development including components, navigation, and state management.',
-      thumbnail: 'https://via.placeholder.com/400x200',
-      instructor: 'John Doe',
-      lessons: [
-        { _id: 'l1', title: 'Introduction to React Native', duration: '10 min', isFree: true },
-        { _id: 'l2', title: 'Components & Props', duration: '15 min', isFree: true },
-        { _id: 'l3', title: 'State Management', duration: '20 min', isFree: false },
-        { _id: 'l4', title: 'Navigation', duration: '25 min', isFree: false },
-      ],
-      price: 0,
-      isPremium: false,
-      enrolled: true,
-      progress: 25,
-    });
-    setLoading(false);
-  }, [id]);
+  const courseData = useQuery(api.courses.getCourseDetails, { courseId: id as any });
+  const lessonsData = useQuery(api.lessons.getLessonsByCourse, { courseId: id as any });
+  const enrollMutation = useMutation(api.courses.enrollFreeCourse);
 
-  if (loading || !course) {
+  const isLoading = courseData === undefined || lessonsData === undefined;
+  const error = courseData === null;
+
+  const course = courseData;
+  const lessons = lessonsData || [];
+
+  const handleEnrollFree = async () => {
+    try {
+      const currentUser = await useQuery(api.users.getCurrentUser);
+      if (currentUser) {
+        await enrollMutation({ userId: currentUser._id, courseId: id as any });
+      }
+    } catch (err) {
+      console.error('Enroll failed:', err);
+    }
+  };
+
+  const handleLessonPress = (lesson: any) => {
+    if (lesson.isFree || course?.isEnrolled) {
+      router.push(`/course/lesson/${lesson._id}`);
+    } else {
+      router.push(`/payment/${id}`);
+    }
+  };
+
+  if (isLoading) {
     return (
       <View style={styles.container}>
         <Text>Loading...</Text>
@@ -40,34 +47,33 @@ export default function CourseDetailScreen() {
     );
   }
 
-  const handleLessonPress = (lesson: any) => {
-    if (lesson.isFree || course.enrolled) {
-      router.push(`/course/lesson/${lesson._id}`);
-    } else {
-      router.push(`/payment/${course._id}`);
-    }
-  };
+  if (error || !course) {
+    return (
+      <View style={styles.container}>
+        <Text>Course not found</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={styles.container}>
-      <Image source={{ uri: course.thumbnail }} style={styles.thumbnail} />
+      <Image source={{ uri: course.thumbnailUrl }} style={styles.thumbnail} />
 
       <View style={styles.content}>
         <Text style={styles.title}>{course.title}</Text>
-        <Text style={styles.instructor}>By {course.instructor}</Text>
         <Text style={styles.description}>{course.description}</Text>
 
-        {course.enrolled && (
+        {course.isEnrolled && course.totalLessons && (
           <View style={styles.progressSection}>
             <Text style={styles.sectionTitle}>Your Progress</Text>
-            <ProgressBar progress={course.progress} />
-            <Text style={styles.progressText}>{course.progress}% complete</Text>
+            <ProgressBar progress={0} />
+            <Text style={styles.progressText}>0% complete</Text>
           </View>
         )}
 
         <View style={styles.lessonsSection}>
-          <Text style={styles.sectionTitle}>Lessons</Text>
-          {course.lessons.map((lesson: any, index: number) => (
+          <Text style={styles.sectionTitle}>Lessons ({lessons.length})</Text>
+          {lessons.map((lesson: any, index: number) => (
             <TouchableOpacity
               key={lesson._id}
               style={styles.lessonItem}
@@ -78,12 +84,10 @@ export default function CourseDetailScreen() {
               </View>
               <View style={styles.lessonInfo}>
                 <Text style={styles.lessonTitle}>{lesson.title}</Text>
-                <Text style={styles.lessonDuration}>{lesson.duration}</Text>
+                <Text style={styles.lessonDuration}>{lesson.duration} min</Text>
               </View>
-              {lesson.isFree ? (
+              {course.isEnrolled || index === 0 ? (
                 <Ionicons name="play-circle" size={24} color="#6366f1" />
-              ) : course.enrolled ? (
-                <Ionicons name="lock-open" size={24} color="#10b981" />
               ) : (
                 <Ionicons name="lock-closed" size={24} color="#9ca3af" />
               )}
@@ -91,22 +95,16 @@ export default function CourseDetailScreen() {
           ))}
         </View>
 
-        {!course.enrolled && !course.isPremium && (
-          <TouchableOpacity
-            style={styles.enrollButton}
-            onPress={() => router.push(`/payment/${course._id}`)}
-          >
+        {!course.isEnrolled && course.type === 'free' && (
+          <TouchableOpacity style={styles.enrollButton} onPress={handleEnrollFree}>
             <Text style={styles.enrollButtonText}>Enroll Now - Free</Text>
           </TouchableOpacity>
         )}
 
-        {!course.enrolled && course.isPremium && (
-          <TouchableOpacity
-            style={styles.enrollButton}
-            onPress={() => router.push(`/payment/${course._id}`)}
-          >
+        {!course.isEnrolled && course.type === 'premium' && (
+          <TouchableOpacity style={styles.enrollButton} onPress={() => router.push(`/payment/${id}`)}>
             <Text style={styles.enrollButtonText}>
-              Unlock for {course.price.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}
+              Unlock for {course.price?.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' })}
             </Text>
           </TouchableOpacity>
         )}

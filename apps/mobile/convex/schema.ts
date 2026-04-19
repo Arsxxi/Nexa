@@ -105,8 +105,10 @@ export default defineSchema({
     userId: v.id('users'),
     coinAmount: v.number(),
     rupiahAmount: v.number(),
-    bankAccount: v.string(),
-    bankName: v.string(),
+    bankCode: v.string(),
+    accountNumber: v.string(),
+    accountHolderName: v.string(),
+    bankName: v.string(), // Keep for display
     status: v.union(
       v.literal('pending'),
       v.literal('approved'),
@@ -115,6 +117,10 @@ export default defineSchema({
     requestedAt: v.number(),
     processedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),
+    disburseReference: v.optional(v.string()),
+    disburseStatus: v.optional(v.string()),
+    disbursedAt: v.optional(v.number()),
+    disburseError: v.optional(v.string()),
   })
     .index('by_user', ['userId'])
     .index('by_status', ['status']),
