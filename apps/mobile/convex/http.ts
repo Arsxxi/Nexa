@@ -283,4 +283,59 @@ http.route({
   }),
 });
 
+// ✅ NEW: Webhook for redeem payment notifications from Midtrans
+// Handles payment status updates for coin redemption
+http.route({
+  path: '/midtrans-redeem-webhook',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const body = await request.json();
+
+    const orderId = body.order_id;
+    const transactionStatus = body.transaction_status;
+    const statusCode = body.status_code;
+    const grossAmount = body.gross_amount;
+    const signatureKey = body.signature_key;
+
+    // Verify signature
+    if (signatureKey) {
+      const isValid = await verifySignature(
+        orderId,
+        statusCode,
+        grossAmount.toString(),
+        signatureKey
+      );
+      if (!isValid) {
+        console.error('Invalid signature for redeem webhook:', orderId);
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    try {
+      // Update redeem payment status
+      await ctx.runMutation(internal.payments.handleRedeemPaymentCallback, {
+        orderId,
+        transactionStatus,
+        grossAmount,
+      });
+
+      console.log(`Redeem payment webhook processed: ${orderId} - ${transactionStatus}`);
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('Redeem webhook processing error:', error);
+      return new Response(JSON.stringify({ error: 'Webhook processing failed', details: (error as Error).message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
 export default http;

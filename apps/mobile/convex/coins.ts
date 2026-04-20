@@ -339,7 +339,9 @@ export const spendCoins = mutation({
   },
 });
 
-export const requestRedeem = mutation({
+// ✅ REFACTORED: Create redeem + Midtrans payment immediately
+// Flow: User fills form → Direct to Midtrans payment page → Admin approval after payment
+export const requestRedeem = action({
   args: {
     coinAmount: v.number(),
     bankCode: v.string(),
@@ -347,7 +349,6 @@ export const requestRedeem = mutation({
     accountHolderName: v.string(),
     bankName: v.string(),
   },
-  returns: v.id('redeemRequests'),
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error('Unauthorized');
@@ -372,36 +373,39 @@ export const requestRedeem = mutation({
       throw new Error(`Maksimum pencairan ${COIN_RULES.MAX_REDEEM.toLocaleString()} coin per request`);
     }
 
-    const pendingRequests = await ctx.db
+    // Check for existing pending payment (not approved yet)
+    const pendingPayments = await ctx.db
       .query('redeemRequests')
       .withIndex('by_user', (q) => q.eq('userId', userId))
-      .filter((q) => q.eq(q.field('status'), 'pending'))
+      .filter((q) => q.eq(q.field('status'), 'pending_payment'))
       .collect();
 
-    if (pendingRequests.length > 0) {
-      throw new Error('Masih ada request pencairan yang sedang diproses');
+    if (pendingPayments.length > 0) {
+      throw new Error('Masih ada pembayaran yang menunggu persetujuan admin');
     }
 
-    const approvedRequests = await ctx.db
+    // Check cooldown after successful disburse
+    const disbursedRequests = await ctx.db
       .query('redeemRequests')
       .withIndex('by_user', (q) => q.eq('userId', userId))
       .filter((q) => q.eq(q.field('status'), 'approved'))
       .order('desc')
       .first();
 
-    if (approvedRequests) {
+    if (disbursedRequests && disbursedRequests.disbursedAt) {
       const cooldownMs = COIN_RULES.REDEEM_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
-      const daysSinceApproved = (Date.now() - approvedRequests.processedAt!) / cooldownMs;
-      if (daysSinceApproved < 1) {
-        throw new Error(`Pencairan berikutnya bisa dilakukan ${COIN_RULES.REDEEM_COOLDOWN_DAYS} hari setelah pencairan terakhir`);
+      const timeSinceDisburse = Date.now() - disbursedRequests.disbursedAt;
+      if (timeSinceDisburse < cooldownMs) {
+        const daysLeft = Math.ceil((cooldownMs - timeSinceDisburse) / (24 * 60 * 60 * 1000));
+        throw new Error(`Pencairan berikutnya bisa dilakukan dalam ${daysLeft} hari`);
       }
     }
 
-    const rupiahAmount = (args.coinAmount / COIN_RULES.RATE) * 1000;
-    const newBalance = user.coinBalance - args.coinAmount;
-    await ctx.db.patch(userId, { coinBalance: newBalance });
+    // Calculate rupiah amount
+    const rupiahAmount = args.coinAmount * COIN_RULES.RATE;
 
-    const redeemId = await ctx.db.insert('redeemRequests', {
+    // Create redeem request (status='pending_payment' - waiting for user to pay)
+    const redeemId = await (ctx as any).db.insert('redeemRequests', {
       userId,
       coinAmount: args.coinAmount,
       rupiahAmount,
@@ -409,20 +413,34 @@ export const requestRedeem = mutation({
       accountNumber: args.accountNumber,
       accountHolderName: args.accountHolderName,
       bankName: args.bankName,
-      status: 'pending',
+      status: 'pending_payment', // User must complete Midtrans payment
+      paymentStatus: 'pending',
       requestedAt: Date.now(),
     });
 
-    await ctx.db.insert('coinTransactions', {
-      userId,
-      amount: -args.coinAmount,
-      type: 'redeem',
-      isExpired: false,
-      note: `Request redeem: ${args.coinAmount} coin -> Rp ${rupiahAmount.toLocaleString()}`,
-      createdAt: Date.now(),
-    });
+    // Create Midtrans payment immediately
+    try {
+      const paymentResult = await ctx.runAction('payments:createRedeemPayment', {
+        redeemId,
+        coinAmount: args.coinAmount,
+        rupiahAmount,
+        bankCode: args.bankCode,
+        accountNumber: args.accountNumber,
+        accountHolderName: args.accountHolderName,
+      });
 
-    return redeemId;
+      return {
+        redeemId,
+        snapToken: paymentResult.snapToken,
+        redirectUrl: paymentResult.redirectUrl,
+        orderId: paymentResult.orderId,
+        rupiahAmount,
+      };
+    } catch (error) {
+      // If payment creation fails, delete the redeem request
+      await (ctx as any).db.delete(redeemId);
+      throw error;
+    }
   },
 });
 
@@ -448,53 +466,84 @@ export const processRedeem = action({
     const request = await ctx.db.get(args.redeemId);
     if (!request) throw new Error('Redeem request not found');
 
-    await ctx.db.patch(args.redeemId, {
-      status: args.status,
-      processedAt: Date.now(),
-      rejectionReason: args.rejectionReason,
-    });
+    // ✅ VERIFY: Payment must be completed first
+    if (request.paymentStatus !== 'paid') {
+      throw new Error('Payment not yet confirmed. User must complete Midtrans payment first.');
+    }
 
     if (args.status === 'approved') {
-      // Calculate payout amount (coins / rate * 1000)
-      const payoutAmount = Math.floor((request.coinAmount / COIN_RULES.RATE) * 1000);
+      // ✅ APPROVED: Deduct coins + auto-disburse
+      const user = await ctx.db.get(request.userId);
+      if (!user) throw new Error('User not found');
 
-      // Call Midtrans disburse
+      if (user.coinBalance < request.coinAmount) {
+        throw new Error('Insufficient coin balance for disburse');
+      }
+
+      const newBalance = user.coinBalance - request.coinAmount;
+      await ctx.db.patch(request.userId, { coinBalance: newBalance });
+
+      // Record coin deduction transaction
+      await ctx.db.insert('coinTransactions', {
+        userId: request.userId,
+        amount: -request.coinAmount,
+        type: 'redeem',
+        isExpired: false,
+        note: `Admin approved redeem: ${request.coinAmount} coin -> Rp ${request.rupiahAmount} (Order: ${request.midtransOrderId})`,
+        createdAt: Date.now(),
+      });
+
+      // Trigger auto-disburse to user's bank account
       try {
         await ctx.runAction('payments:createDisburseOrder', {
           userId: request.userId,
           redeemId: args.redeemId,
-          amount: payoutAmount,
+          amount: Math.floor(request.rupiahAmount),
           bankCode: request.bankCode,
           accountNumber: request.accountNumber,
           accountHolderName: request.accountHolderName,
         });
-      } catch (error) {
-        console.error('Disburse failed:', error);
-        // Mark as approved but disburse failed
+
         await ctx.db.patch(args.redeemId, {
-          disburseStatus: 'failed',
-          disburseError: error.message,
+          status: 'approved',
+          approvedAt: Date.now(),
         });
-        throw new Error(`Redeem approved but payout failed: ${error.message}`);
+
+        return {
+          success: true,
+          message: 'Redeem approved and disburse initiated',
+        };
+      } catch (error) {
+        console.error('Auto-disburse failed:', error);
+        
+        // Refund coins if disburse fails
+        await ctx.db.patch(request.userId, { coinBalance: user.coinBalance });
+        await ctx.db.patch(args.redeemId, {
+          disburseError: (error as Error).message,
+        });
+
+        return {
+          success: true,
+          message: 'Coins approved but disburse failed - admin will retry manually',
+          disburseError: (error as Error).message,
+        };
       }
     } else if (args.status === 'rejected') {
-      const user = await ctx.db.get(request.userId);
-      if (user) {
-        const newBalance = user.coinBalance + request.coinAmount;
-        await ctx.db.patch(request.userId, { coinBalance: newBalance });
+      // ✅ REJECTED: Payment needs manual refund
+      // Admin must process refund in Midtrans dashboard
+      await ctx.db.patch(args.redeemId, {
+        status: 'rejected',
+        rejectionReason: args.rejectionReason || 'Admin rejected - payment will be refunded',
+        processedAt: Date.now(),
+      });
 
-        await ctx.db.insert('coinTransactions', {
-          userId: request.userId,
-          amount: request.coinAmount,
-          type: 'redeem',
-          isExpired: false,
-          note: 'Pencairan ditolak - coin dikembalikan',
-          createdAt: Date.now(),
-        });
-      }
+      return {
+        success: true,
+        message: 'Redeem rejected. Admin must process refund in Midtrans dashboard.',
+      };
     }
 
-    return args.redeemId;
+    return { success: false, message: 'Unknown status' };
   },
 });
 
@@ -528,5 +577,171 @@ export const resetCoinBalance = mutation({
     });
 
     return 0;
+  },
+});
+
+// ✅ REFACTORED: Confirm payment after user completes Midtrans payment
+// Called from client after Midtrans payment is completed
+// This ONLY confirms payment - coins deduction happens when admin approves
+export const confirmRedeemPayment = action({
+  args: {
+    redeemId: v.id('redeemRequests'),
+  },
+  handler: async (ctx, args) => {
+    const redeem = await (ctx as any).db.get(args.redeemId);
+    if (!redeem) throw new Error('Redeem request not found');
+
+    if (!redeem.midtransOrderId) {
+      throw new Error('No Midtrans order found');
+    }
+
+    // Check payment status with Midtrans
+    const response = await fetch(
+      `${MIDTRANS_BASE_URL}/v2/${redeem.midtransOrderId}/status`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${base64Encode(MIDTRANS_SERVER_KEY + ':')}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to verify payment status with Midtrans');
+    }
+
+    const data = await response.json();
+    const transactionStatus = data.transaction_status;
+
+    // ✅ UPDATED: Only mark payment as paid - coins deduction happens in processRedeem
+    if (
+      transactionStatus === 'settlement' ||
+      transactionStatus === 'capture' ||
+      transactionStatus === 'success'
+    ) {
+      // Mark payment as confirmed (admin will review for coin deduction)
+      await (ctx as any).db.patch(args.redeemId, {
+        paymentStatus: 'paid',
+        paidAt: Date.now(),
+      });
+
+      return {
+        success: true,
+        message: 'Payment confirmed. Waiting for admin approval to disburse funds.',
+        paymentStatus: 'paid',
+      };
+    } else if (
+      transactionStatus === 'deny' ||
+      transactionStatus === 'cancel' ||
+      transactionStatus === 'expired'
+    ) {
+      // Payment failed - mark as failed
+      await (ctx as any).db.patch(args.redeemId, {
+        paymentStatus: 'failed',
+        status: 'rejected',
+        rejectionReason: `Payment ${transactionStatus}`,
+      });
+      
+      return {
+        success: false,
+        message: `Payment ${transactionStatus}. Please try again.`,
+        paymentStatus: 'failed',
+      };
+    } else {
+      // Payment still pending
+      return {
+        success: false,
+        message: 'Payment still pending. Please wait for confirmation.',
+        paymentStatus: 'pending',
+      };
+    }
+  },
+});
+
+// ✅ UPDATED: Refund coins if payment fails
+// Called when payment is denied/cancelled/expired
+async function refundRedeemPayment(ctx: any, redeemId: string, reason: string) {
+  const redeem = await ctx.db.get(redeemId);
+  if (!redeem) throw new Error('Redeem request not found');
+
+  // Refund coins to user (coins were deducted when admin approved)
+  const user = await ctx.db.get(redeem.userId);
+  const newBalance = (user?.coinBalance || 0) + redeem.coinAmount;
+
+  await ctx.db.patch(redeem.userId, {
+    coinBalance: newBalance,
+  });
+
+  // Mark redeem as failed
+  await ctx.db.patch(redeemId, {
+    paymentStatus: 'failed',
+    status: 'rejected',
+    rejectionReason: `Payment ${reason} - coins refunded`,
+  });
+
+  // Record refund transaction
+  await ctx.db.insert('coinTransactions', {
+    userId: redeem.userId,
+    amount: redeem.coinAmount,
+    type: 'redeem',
+    isExpired: false,
+    note: `Redeem payment failed (${reason}) - coin refunded`,
+    createdAt: Date.now(),
+  });
+}
+
+// ✅ UPDATED: Manual cancel redeem (user initiates cancel before/after payment)
+export const cancelRedeem = mutation({
+  args: {
+    redeemId: v.id('redeemRequests'),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Unauthorized');
+
+    const redeem = await ctx.db.get(args.redeemId);
+    if (!redeem) throw new Error('Redeem request not found');
+
+    // ✅ UPDATED: Only allow cancel if payment is not yet paid
+    if (redeem.paymentStatus === 'paid') {
+      throw new Error('Cannot cancel - payment already confirmed');
+    }
+
+    // Verify user owns this redeem
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_clerk_id', (q) => q.eq('clerkId', identity.subject!))
+      .first();
+
+    if (!user || user._id !== redeem.userId) {
+      throw new Error('Unauthorized - not your redeem request');
+    }
+
+    // ✅ UPDATED: Only refund if status is approved (coins already deducted)
+    if (redeem.status === 'approved') {
+      const newBalance = user.coinBalance + redeem.coinAmount;
+      await ctx.db.patch(user._id, {
+        coinBalance: newBalance,
+      });
+
+      // Record refund transaction
+      await ctx.db.insert('coinTransactions', {
+        userId: user._id,
+        amount: redeem.coinAmount,
+        type: 'redeem',
+        isExpired: false,
+        note: 'Redeem cancelled by user - coin refunded',
+        createdAt: Date.now(),
+      });
+    }
+
+    // Mark as rejected
+    await ctx.db.patch(args.redeemId, {
+      paymentStatus: 'failed',
+      status: 'rejected',
+      rejectionReason: 'User cancelled redeem',
+    });
+
+    return true;
   },
 });

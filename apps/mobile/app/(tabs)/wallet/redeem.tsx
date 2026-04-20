@@ -1,8 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal, Linking } from 'react-native';
+import { WebView, WebViewNavigation } from 'react-native-webview';
 import { PanGestureHandler, State, PanGestureHandlerGestureEvent, PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
-import { useMutation, useQuery } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
 const COLORS = {
@@ -33,10 +34,15 @@ export default function RedeemCoinModal() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
   const [modalVisible, setModalVisible] = useState(true);
+  const [paymentStep, setPaymentStep] = useState<'form' | 'payment' | 'waiting'>('form');
+  const [snapToken, setSnapToken] = useState<string | null>(null);
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
+  const [redeemId, setRedeemId] = useState<string | null>(null);
   const panRef = useRef(null);
 
   const balance = useQuery(api.coins.getCoinBalance);
-  const requestRedeemMutation = useMutation(api.coins.requestRedeem);
+  const requestRedeemAction = useAction(api.coins.requestRedeem);
+  const confirmRedeemPaymentAction = useAction(api.coins.confirmRedeemPayment);
 
   const parseCoinAmount = (value: string) => {
     const coinNum = parseInt(value.replace(/\D/g, ''), 10);
@@ -96,10 +102,11 @@ export default function RedeemCoinModal() {
   };
 
   const coinAmountNumber = parseCoinAmount(coinAmount);
-  const grossAmount = coinAmountNumber * 10;
+  const grossAmount = coinAmountNumber * 10; // Using conversion rate: 1 coin = Rp 10
   const adminFee = 2500;
   const totalTransfer = Math.max(0, grossAmount - adminFee);
 
+  // ✅ REFACTORED: Submit form → Midtrans payment immediately
   const handleAjukanRedeem = async () => {
     if (!validateForm()) {
       return;
@@ -107,24 +114,81 @@ export default function RedeemCoinModal() {
 
     setSubmitting(true);
     try {
-      await requestRedeemMutation({
+      // Call requestRedeem ACTION (not mutation anymore)
+      // This creates redeem request AND Midtrans payment
+      const result = await requestRedeemAction({
         coinAmount: parseCoinAmount(coinAmount),
         bankCode: selectedBank.code,
         accountNumber: accountNumber.trim(),
         accountHolderName: accountName.trim(),
         bankName: selectedBank.name,
       });
+
+      console.log('Redeem + Payment created:', result);
+      setRedeemId(result.redeemId);
+      setSnapToken(result.snapToken);
+      setRedirectUrl(result.redirectUrl);
       
-      Alert.alert(
-        'Redeem Diajukan',
-        `Anda mengajukan penukaran ${parseCoinAmount(coinAmount).toLocaleString()} koin ke ${formatRupiah(grossAmount)}. Mohon tunggu proses validasi.`,
-        [{ text: 'OK', onPress: handleClose }]
-      );
+      // Go straight to payment page
+      setPaymentStep('payment');
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Gagal mengajukan redeem.');
+      Alert.alert('Error', err.message || 'Gagal membuat pembayaran. Silakan coba lagi.');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // ✅ UPDATED: After user completes Midtrans payment
+  const handlePaymentSuccess = async () => {
+    if (!redeemId) {
+      Alert.alert('Error', 'Redeem ID not found');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Confirm payment with Midtrans
+      const confirmResult = await confirmRedeemPaymentAction({
+        redeemId,
+      });
+
+      if (confirmResult.success && confirmResult.paymentStatus === 'paid') {
+        // Payment confirmed - now waiting for admin approval
+        setPaymentStep('waiting');
+      } else {
+        Alert.alert(
+          'Pembayaran Gagal',
+          confirmResult.message || 'Pembayaran dibatalkan. Silakan coba lagi.'
+        );
+        setPaymentStep('form');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Gagal memverifikasi pembayaran.');
+      setPaymentStep('form');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // ✅ UPDATED: Handle payment cancel (user closes payment page)
+  const handlePaymentCancel = () => {
+    Alert.alert(
+      'Batal Pembayaran?',
+      'Jika Anda keluar tanpa menyelesaikan pembayaran, request ini akan hangus.',
+      [
+        { text: 'Lanjutkan Bayar', style: 'cancel' },
+        {
+          text: 'Batal',
+          style: 'destructive',
+          onPress: () => {
+            setPaymentStep('form');
+            setSnapToken(null);
+            setRedirectUrl(null);
+            setRedeemId(null);
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -134,17 +198,90 @@ export default function RedeemCoinModal() {
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <PanGestureHandler
-        ref={panRef}
-        onGestureEvent={onPanGestureEvent}
-        onHandlerStateChange={onPanHandlerStateChange}
-      >
-        <View style={styles.modalContainer}>
-          <KeyboardAvoidingView 
-            style={{ flex: 1 }} 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      {/* Screen 1: Midtrans Payment Page */}
+      {paymentStep === 'payment' && snapToken && redirectUrl ? (
+        <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+          {/* Payment Header */}
+          <View style={styles.paymentHeader}>
+            <TouchableOpacity 
+              onPress={handlePaymentCancel}
+              disabled={submitting}
+            >
+              <Text style={styles.backButtonText}>← Batal</Text>
+            </TouchableOpacity>
+            <Text style={styles.paymentTitle}>PEMBAYARAN MIDTRANS</Text>
+            <View style={{ width: 50 }} />
+          </View>
+
+          {/* Midtrans Payment Page via WebView */}
+          <WebView
+            source={{ uri: redirectUrl }}
+            style={{ flex: 1 }}
+            startInLoadingState
+            renderLoading={() => (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#FFC800" />
+                <Text style={styles.loadingText}>Memuat halaman pembayaran...</Text>
+              </View>
+            )}
+            onNavigationStateChange={(navState: WebViewNavigation) => {
+              // Check if payment is completed
+              if (navState.url && (navState.url.includes('finish') || navState.url.includes('success'))) {
+                handlePaymentSuccess();
+              }
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            scalesPageToFit={true}
+          />
+
+          {/* Manual Confirm Button (fallback) */}
+          <View style={styles.paymentFooter}>
+            <TouchableOpacity 
+              style={[styles.btnSubmit, submitting && styles.btnDisabled]}
+              onPress={handlePaymentSuccess}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.btnSubmitText}>KONFIRMASI PEMBAYARAN</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : paymentStep === 'waiting' ? (
+        // Screen 2: Waiting for Admin Approval
+        <View style={[styles.modalContainer, styles.waitingContainer]}>
+          <View style={styles.waitingContent}>
+            <Text style={styles.waitingEmoji}>⏳</Text>
+            <Text style={styles.waitingTitle}>Pembayaran Dikonfirmasi!</Text>
+            <Text style={styles.waitingSubtitle}>Menunggu persetujuan admin...</Text>
+            <Text style={styles.waitingDescription}>
+              Pembayaran Anda sebesar {formatRupiah(grossAmount)} telah kami terima.{'\n\n'}
+              Admin akan mereview dan menyetujui dalam waktu singkat. Anda akan menerima notifikasi ketika dana ditransfer ke rekening Anda.
+            </Text>
+            <TouchableOpacity 
+              style={styles.btnOk}
+              onPress={handleClose}
+            >
+              <Text style={styles.btnOkText}>TUTUP</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        // Screen 3: Form view
+        <PanGestureHandler
+          ref={panRef}
+          onGestureEvent={onPanGestureEvent}
+          onHandlerStateChange={onPanHandlerStateChange}
+        >
+          <View style={styles.modalContainer}>
+            <KeyboardAvoidingView 
+              style={{ flex: 1 }} 
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+              <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
               {/* Handle Bar for dragging */}
               <View style={styles.handleContainer}>
                 <View style={styles.handleBar} />
@@ -177,7 +314,7 @@ export default function RedeemCoinModal() {
                   />
                   {errors.coinAmount && <Text style={styles.errorText}>{errors.coinAmount}</Text>}
                   <Text style={styles.helperText}>
-                    Minimum: 5.000 koin • Rate: 1 koin = Rp 100
+                    Minimum: 5.000 koin • Rate: 1 koin = Rp 10
                   </Text>
                 </View>
 
@@ -267,6 +404,12 @@ export default function RedeemCoinModal() {
                     </View>
                   </View>
                 )}
+
+                {/* Info Box - Payment Flow */}
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoIcon}>ℹ️</Text>
+                  <Text style={styles.infoText}>Klik tombol di bawah untuk melanjutkan ke halaman pembayaran Midtrans. Setelah membayar, admin akan mereview dan mentransfer dana ke rekening Anda.</Text>
+                </View>
               </View>
 
               {/* Action Buttons */}
@@ -287,14 +430,15 @@ export default function RedeemCoinModal() {
                   {submitting ? (
                     <ActivityIndicator color="#FFFFFF" size="small" />
                   ) : (
-                    <Text style={styles.btnSubmitText}>AJUKAN REDEEM</Text>
+                    <Text style={styles.btnSubmitText}>LANJUT KE PEMBAYARAN</Text>
                   )}
                 </TouchableOpacity>
               </View>
             </ScrollView>
           </KeyboardAvoidingView>
         </View>
-      </PanGestureHandler>
+        </PanGestureHandler>
+      )}
     </Modal>
   );
 }
@@ -526,4 +670,97 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   btnAjukanText: { fontSize: 14, fontWeight: '800', color: COLORS.text, letterSpacing: 1 },
+
+  // ✅ NEW: Payment page styles
+  paymentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.bgCard,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  backButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFC800',
+  },
+  paymentTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.bgCard,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  paymentFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.bgCard,
+  },
+
+  // ✅ NEW: Waiting for admin approval screen
+  waitingContainer: {
+    backgroundColor: 'transparent',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: 0,
+  },
+  waitingContent: {
+    backgroundColor: COLORS.bgCard,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+    alignItems: 'center',
+    width: '100%',
+  },
+  waitingEmoji: {
+    fontSize: 60,
+    marginBottom: 16,
+  },
+  waitingTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  waitingSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    marginBottom: 16,
+  },
+  waitingDescription: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 32,
+  },
+  btnOk: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 32,
+    paddingVertical: 12,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  btnOkText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
 });

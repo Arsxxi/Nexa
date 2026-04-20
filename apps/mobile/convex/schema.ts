@@ -109,12 +109,24 @@ export default defineSchema({
     accountNumber: v.string(),
     accountHolderName: v.string(),
     bankName: v.string(), // Keep for display
+    // Admin approval flow
     status: v.union(
-      v.literal('pending'),
-      v.literal('approved'),
-      v.literal('rejected')
+      v.literal('pending'),         // Waiting admin approval
+      v.literal('approved'),        // Admin approved - ready for payment
+      v.literal('rejected')         // Admin rejected
     ),
+    // Midtrans payment tracking (only after admin approves)
+    midtransOrderId: v.optional(v.string()),
+    midtransSnapToken: v.optional(v.string()),
+    paymentStatus: v.optional(v.union(
+      v.literal('pending'),         // Payment waiting to be completed
+      v.literal('paid'),            // Payment successful
+      v.literal('failed'),          // Payment failed or cancelled
+      v.literal('expired')          // Payment expired
+    )),
     requestedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),
     disburseReference: v.optional(v.string()),
@@ -123,5 +135,6 @@ export default defineSchema({
     disburseError: v.optional(v.string()),
   })
     .index('by_user', ['userId'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    .index('by_midtrans_order', ['midtransOrderId']),
 });

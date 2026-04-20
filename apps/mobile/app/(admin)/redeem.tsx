@@ -52,15 +52,30 @@ export default function RedeemAdminScreen() {
   const handleApprove = async (request: RedeemRequest) => {
     Alert.alert(
       'Approve Request',
-      `Approve redemption of ${request.coinAmount.toLocaleString()} coin to ${request.bankName}?`,
+      `Approve redemption of ${request.coinAmount.toLocaleString()} coin to ${request.bankName}? User akan diminta untuk membayar melalui Midtrans.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Approve',
           onPress: async () => {
             try {
-              await processRedeem({ redeemId: request._id, status: 'approved' });
-              Alert.alert('Success', 'Redeem request approved');
+              const result = await processRedeem({ redeemId: request._id, status: 'approved' });
+              
+              // ✅ NEW: Show payment info to admin
+              if (result.success && result.snapToken) {
+                Alert.alert(
+                  'Request Approved',
+                  `Payment page created. Snap Token: ${result.snapToken.substring(0, 20)}...`,
+                  [
+                    { 
+                      text: 'OK', 
+                      onPress: () => console.log('Snap token:', result.snapToken)
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Success', 'Redeem request approved');
+              }
             } catch (error: any) {
               Alert.alert('Error', error.message || 'Failed to approve');
             }
