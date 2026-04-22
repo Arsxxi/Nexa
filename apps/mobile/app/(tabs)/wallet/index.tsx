@@ -6,6 +6,12 @@ import { useCoin } from '@/hooks/useCoin';
 import { useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 type FilterType = 'SEMUA' | 'MASUK' | 'KELUAR';
 
 export default function WalletTabScreen() {

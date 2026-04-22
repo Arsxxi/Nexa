@@ -13,6 +13,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 // ==========================================
 // MAIN COMPONENT (LOGIC & ROUTING)
 // ==========================================
@@ -106,10 +112,9 @@ export default function CourseDetailScreen() {
 // UI COMPONENT: ENROLLED
 // ==========================================
 const EnrolledView = ({ course, lessons, router, onLessonPress }: any) => {
-  // Simulasi progress berdasarkan urutan (bisa disesuaikan dgn data backend nanti)
-  const totalLessons = lessons.length > 0 ? lessons.length : 8;
-  const completedLessons = course.progress || 0; // Asumsi ada field progress atau ganti logicnya
-  const progressPercentage = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+  const totalLessons = lessons.length > 0 ? lessons.length : course.totalLessons || 0;
+  const completedLessons = course.completedLessons || 0;
+  const progressPercentage = course.progress || 0;
 
   return (
     <SafeAreaView style={stylesEnrolled.safeArea}>
@@ -433,7 +438,7 @@ const stylesEnrolled = StyleSheet.create({
   bannerOverlay: { flex: 1, justifyContent: 'flex-end', padding: 24 },
   tagDark: { backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 12 },
   tagDarkText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600', letterSpacing: 1 },
-  bannerTitle: { color: '#FFC700', fontSize: 28, fontWeight: 'bold', letterSpacing: 1, marginBottom: 4 },
+  bannerTitle: { color: '#FFC700', fontSize: 28, fontFamily: FONT.h1, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
   bannerSubtitle: { color: '#E4E4E7', fontSize: 14 },
   progressContainer: { padding: 24, backgroundColor: '#FAFAFA' },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

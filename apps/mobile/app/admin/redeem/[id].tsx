@@ -4,6 +4,12 @@ import { useQuery } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { StatusBadge } from '../../../components/admin/StatusBadge';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 interface RedeemRequest {
   _id: string;
   userId: string;

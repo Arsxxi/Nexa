@@ -1,16 +1,41 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, Text } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ConvexClerkProvider } from '../app_providers';
 import { useAuth } from '@clerk/clerk-expo';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useFonts } from 'expo-font';
+
+const FONT_FILES = {
+  'SpaceGrotesk-Bold': require('../assets/Fonts/SpaceGrotesk-Bold.ttf'),
+  'nimbus-mono.regular': require('../assets/Fonts/nimbus-mono.regular.otf'),
+  'LiberationSans-Regular': require('../assets/Fonts/LiberationSans-Regular.ttf'),
+};
 
 function Loading() {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator size="large" color="#6C63FF" />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' }}>
+      <ActivityIndicator size="large" color="#FFC800" />
     </View>
   );
+}
+
+function FontLoader({ children }: { children: React.ReactNode }) {
+  const [fontsError, setFontsError] = useState(false);
+  const [fontsLoaded, error] = useFonts(FONT_FILES);
+
+  useEffect(() => {
+    if (error) {
+      console.error('Font loading error:', error);
+      setFontsError(true);
+    }
+  }, [error]);
+
+  if (fontsError || (!fontsLoaded && !error)) {
+    return <Loading />;
+  }
+  
+  return <>{children}</>;
 }
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -52,13 +77,15 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ConvexClerkProvider>
-        <AuthGuard>
-          <View style={{ flex: 1 }}>
-            <Slot />
-          </View>
-        </AuthGuard>
-      </ConvexClerkProvider>
+      <FontLoader>
+        <ConvexClerkProvider>
+          <AuthGuard>
+            <View style={{ flex: 1 }}>
+              <Slot />
+            </View>
+          </AuthGuard>
+        </ConvexClerkProvider>
+      </FontLoader>
     </GestureHandlerRootView>
   );
 }

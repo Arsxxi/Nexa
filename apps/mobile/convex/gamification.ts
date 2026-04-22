@@ -3,11 +3,11 @@ import { mutation, query, internalMutation } from './_generated/server';
 import { COIN_RULES } from './constants/coinRules';
 
 const BADGES = [
-  { id: 'pemula', name: 'Pemula', icon: '🎯', description: 'Selesaikan 1 course' },
-  { id: 'on_fire', name: 'On Fire', icon: '🔥', description: 'Streak 7 hari' },
-  { id: 'premium', name: 'Premium', icon: '💎', description: 'Beli 1 premium course' },
-  { id: 'master', name: 'Master', icon: '🏆', description: 'Selesaikan 5 course' },
-  { id: 'earner', name: 'Earner', icon: '💰', description: 'Total earn lifetime >= 10.000 coin' },
+  { id: 'pemula', name: 'Pemula', icon: 'pemula', description: 'Selesaikan 1 course' },
+  { id: 'on_fire', name: 'Streak Master', icon: 'streak', description: 'Streak 7 hari' },
+  { id: 'premium', name: 'Quiz King', icon: 'quiz', description: 'Beli 1 premium course' },
+  { id: 'master', name: 'Explorer', icon: 'explore', description: 'Selesaikan 5 course' },
+  { id: 'earner', name: 'Coin Hunter', icon: 'coin', description: 'Total earn lifetime >= 10.000 coin' },
 ];
 
 export const addXP = mutation({

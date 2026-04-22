@@ -6,6 +6,12 @@ import { useRouter } from 'expo-router';
 import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 const COLORS = {
   primary: '#FFC800',
   dark: '#18181B',
@@ -481,14 +487,16 @@ const styles = StyleSheet.create({
   
   // Header
   header: { marginBottom: 32 },
-  headerSub: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
+  headerSub: { fontSize: 10, fontFamily: FONT.h1,
+    fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -1 },
   balanceInfo: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },
 
   // Form
   formContainer: { marginBottom: 3 },
   inputGroup: { marginBottom: 20 },
-  inputLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 8 },
+  inputLabel: { fontSize: 10, fontFamily: FONT.h1,
+    fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 8 },
   input: {
     borderWidth: 1,
     borderColor: COLORS.border,
@@ -556,8 +564,9 @@ const styles = StyleSheet.create({
     padding: 16,
     marginTop: 10,
   },
-  summaryTitle: {
+summaryTitle: {
     fontSize: 12,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -585,6 +594,7 @@ const styles = StyleSheet.create({
   summaryValueTotal: {
     fontSize: 16,
     color: COLORS.primary,
+    fontFamily: FONT.h1,
     fontWeight: '700',
   },
   summaryDivider: {
@@ -623,6 +633,7 @@ const styles = StyleSheet.create({
   },
   btnSubmitText: {
     fontSize: 16,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -698,6 +709,7 @@ const styles = StyleSheet.create({
   },
   paymentTitle: {
     fontSize: 16,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -742,6 +754,7 @@ const styles = StyleSheet.create({
   },
   waitingTitle: {
     fontSize: 20,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 8,
@@ -769,6 +782,7 @@ const styles = StyleSheet.create({
   },
   btnOkText: {
     fontSize: 16,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: COLORS.text,
   },

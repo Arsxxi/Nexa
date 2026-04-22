@@ -5,6 +5,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 export default function PaymentScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const router = useRouter();

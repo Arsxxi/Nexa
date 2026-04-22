@@ -13,6 +13,12 @@ import {
 import { Link, router } from 'expo-router';
 import { useSignIn } from '@clerk/clerk-expo';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 const COLORS = {
   primary: '#FFC800',
   background: '#FAFAFA',

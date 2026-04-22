@@ -15,6 +15,12 @@ import { useSignUp } from '@clerk/clerk-expo';
 import { useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 const COLORS = {
   primary: '#FFC800',
   background: '#FAFAFA',

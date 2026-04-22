@@ -7,6 +7,12 @@ import { api } from '@convex/_generated/api';
 import { Id } from '@convex/_generated/dataModel';
 import { StatusBadge } from '../../components/admin/StatusBadge';
 
+const FONT = {
+  h1: 'SpaceGrotesk-Bold',
+  h2: 'nimbus-mono.regular',
+  h3: 'LiberationSans-Regular',
+};
+
 interface RedeemRequest {
   _id: Id<'redeemRequests'>;
   userId: Id<'users'>;
@@ -315,6 +321,7 @@ const styles = StyleSheet.create({
   },
   activeTabLabel: {
     color: '#18181B',
+    fontFamily: FONT.h1,
     fontWeight: '700',
   },
   badge: {
@@ -325,6 +332,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: '#18181B',
   },
@@ -349,6 +357,7 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: 14,
+    fontFamily: FONT.h1,
     fontWeight: '700',
     color: '#18181B',
   },
