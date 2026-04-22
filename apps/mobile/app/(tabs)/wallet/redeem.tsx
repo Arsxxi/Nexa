@@ -128,6 +128,11 @@ export default function RedeemCoinModal() {
       setRedeemId(result.redeemId);
       setSnapToken(result.snapToken);
       setRedirectUrl(result.redirectUrl);
+
+      Alert.alert(
+        'Redeem terkirim',
+        'Permintaan redeem sedang menunggu verifikasi. Silakan lanjutkan pembayaran untuk menyelesaikan proses.',
+      );
       
       // Go straight to payment page
       setPaymentStep('payment');
@@ -154,6 +159,10 @@ export default function RedeemCoinModal() {
 
       if (confirmResult.success && confirmResult.paymentStatus === 'paid') {
         // Payment confirmed - now waiting for admin approval
+        Alert.alert(
+          'Redeem waiting for verification',
+          'Pembayaran sudah diterima. Permintaan redeem Anda sekarang menunggu verifikasi admin.',
+        );
         setPaymentStep('waiting');
       } else {
         Alert.alert(

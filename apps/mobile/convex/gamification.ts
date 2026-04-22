@@ -20,10 +20,17 @@ export const addXP = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error('User not found');
 
-    const newXP = user.xp + args.amount;
-    await ctx.db.patch(args.userId, { xp: newXP });
+    // Compute new XP and determine level based on thresholds
+    const newXP = (user.xp || 0) + args.amount;
 
-    return { xp: newXP };
+    // Example thresholds: level 1 starts at 0, then 1000 XP per level (can be adjusted)
+    const xpPerLevel = 1250; // use 1250 as seen in design
+    const newLevel = Math.max(1, Math.floor(newXP / xpPerLevel) + 1);
+    const xpIntoLevel = newXP - ( (newLevel - 1) * xpPerLevel );
+
+    await ctx.db.patch(args.userId, { xp: newXP, level: newLevel });
+
+    return { xp: newXP, level: newLevel, xpIntoLevel, xpPerLevel };
   },
 });
 

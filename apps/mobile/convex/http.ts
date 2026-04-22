@@ -338,4 +338,39 @@ http.route({
   }),
 });
 
+http.route({
+  path: '/xendit/disbursement-callback',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const callbackToken = request.headers.get('x-callback-token');
+    const XENDIT_WEBHOOK_TOKEN = process.env.XENDIT_WEBHOOK_TOKEN;
+
+    if (XENDIT_WEBHOOK_TOKEN && callbackToken !== XENDIT_WEBHOOK_TOKEN) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      if (body.external_id?.startsWith('NEXA-REDEEM-')) {
+        await ctx.runMutation(internal.payments.handleXenditCallback, {
+          externalId: body.external_id,
+          status: body.status,
+          failureCode: body.failure_code ?? undefined,
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('Xendit callback error:', error);
+      return new Response(JSON.stringify({ error: 'Callback processing failed' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
 export default http;

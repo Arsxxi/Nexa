@@ -133,15 +133,20 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {renderHeaderBar(true)}
       <View style={styles.centerContent}>
-        <View style={styles.iconBox}>
-          <Text style={{ fontSize: 32 }}>📋</Text>
+        <View style={styles.emptyIconBox}>
+          <View style={styles.gridDots}>
+            {[...Array(9)].map((_, i) => (
+              <View key={i} style={[styles.dot, i === 4 || i === 5 || i === 7 ? { backgroundColor: '#FFC800' } : {}]} />
+            ))}
+          </View>
         </View>
-        <Text style={styles.stateTitle}>BELUM ADA COURSE</Text>
-        <Text style={styles.stateDesc}>
-          Coba cari topik lain atau kembali lagi nanti.
+        <Text style={styles.emptyLabel}>BELUM ADA COURSE</Text>
+        <Text style={styles.emptyDivider}>. . . . . . . .</Text>
+        <Text style={styles.emptyTitle}>
+          {'Mulai jelajahi course\nsekarang'}
         </Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={onRefresh}>
-          <Text style={styles.primaryButtonText}>⚲ CARI_COURSE</Text>
+        <TouchableOpacity style={styles.btnExplore} onPress={onRefresh}>
+          <Text style={styles.btnExploreText}>EXPLORE COURSE →</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -306,6 +311,8 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 24,
   },
+  gridDots: { width: 32, height: 32, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignContent: 'center' },
+  dot: { width: 8, height: 8, backgroundColor: '#E4E4E7', borderRadius: 2 },
   welcomeSub: {
     fontSize: 10,
     fontWeight: '700',
@@ -370,6 +377,46 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
+  },
+  emptyIconBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#F4F4F5',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3F3F46',
+    letterSpacing: 2,
+  },
+  emptyDivider: {
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginVertical: 12,
+    letterSpacing: 4,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  btnExplore: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 8,
+  },
+  btnExploreText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.text,
+    letterSpacing: 1,
   },
   primaryButton: {
     backgroundColor: COLORS.primary,

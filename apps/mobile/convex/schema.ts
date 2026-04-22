@@ -6,6 +6,8 @@ export default defineSchema({
     clerkId: v.string(),
     name: v.string(),
     email: v.string(),
+    avatarUrl: v.optional(v.string()),
+    level: v.optional(v.number()),
     coinBalance: v.number(),
     xp: v.number(),
     streak: v.number(),
@@ -109,10 +111,11 @@ export default defineSchema({
     accountNumber: v.string(),
     accountHolderName: v.string(),
     bankName: v.string(), // Keep for display
-    // Admin approval flow
+    // Admin approval/payment flow
     status: v.union(
       v.literal('pending'),         // Waiting admin approval
-      v.literal('approved'),        // Admin approved - ready for payment
+      v.literal('pending_payment'), // Waiting user payment after request
+      v.literal('approved'),        // Admin approved - ready for payment or disburse
       v.literal('rejected')         // Admin rejected
     ),
     // Midtrans payment tracking (only after admin approves)
