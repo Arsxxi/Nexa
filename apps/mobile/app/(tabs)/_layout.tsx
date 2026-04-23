@@ -1,6 +1,12 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+
+const COLORS = {
+  primary: '#FFC800',
+  border: '#E4E4E7',
+  card: '#FFFFFF',
+};
 
 const TAB_ICONS = {
   index: 'home',
@@ -8,8 +14,6 @@ const TAB_ICONS = {
   wallet: 'wallet',
   profile: 'person',
 };
-
-const DOT_ACTIVE = require('../../assets/images/dot_state.png');
 
 function TabBarIcon({ focused, routeName }: { focused: boolean; routeName: string }) {
   const iconName = TAB_ICONS[routeName as keyof typeof TAB_ICONS] || 'help-circle';
@@ -20,15 +24,13 @@ function TabBarIcon({ focused, routeName }: { focused: boolean; routeName: strin
         <Ionicons 
           name={iconName as any} 
           size={22} 
-          color={focused ? '#FFC800' : '#9ca3af'} 
+          color={focused ? COLORS.primary : '#9ca3af'} 
         />
       </View>
       
       {focused && (
         <View style={styles.dotContainer}>
-          <View style={styles.dotGlow}>
-            {/* Using View as placeholder for dot - actual image requires native */}
-          </View>
+          <View style={styles.dotGlow} />
         </View>
       )}
     </View>
@@ -42,10 +44,10 @@ export default function TabLayout() {
         headerShown: false,
         tabBarStyle: {
           borderTopWidth: 1,
-          borderTopColor: '#e5e7eb',
+          borderTopColor: COLORS.border,
           height: 55,
           paddingBottom: 8,
-          backgroundColor: '#fff',
+          backgroundColor: COLORS.card,
         },
         tabBarShowLabel: false,
       }}
@@ -104,6 +106,6 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#FFC800',
+    backgroundColor: COLORS.primary,
   },
 });

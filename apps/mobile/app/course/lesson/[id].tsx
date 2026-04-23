@@ -6,10 +6,10 @@ import { api } from '@convex/_generated/api';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { QuizModal } from '@/components/QuizModal';
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
 export default function LessonScreen() {

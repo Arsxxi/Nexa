@@ -4,10 +4,10 @@ import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
 export default function MyCoursesScreen() {
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
   headerContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   iconBox: { marginRight: 12 },
-  headerTitle: { fontSize: 20, fontFamily: FONT.h1,
+  headerTitle: { fontSize: 20, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: '#18181B', letterSpacing: -0.5 },
   headerSubtitle: { fontSize: 10, fontWeight: '600', color: '#71717A', letterSpacing: 1.5, marginTop: 2 },
   coinBadge: { backgroundColor: '#F3F0E6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   // Tabs
   tabContainer: { flexDirection: 'row', paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: '#E4E4E7', marginBottom: 16 },
   tabBtn: { marginRight: 24, paddingBottom: 12, position: 'relative' },
-  tabText: { fontSize: 12, fontFamily: FONT.h1,
+  tabText: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: '#A1A1AA', letterSpacing: 1 },
   tabTextActive: { color: '#18181B' },
   activeIndicator: { position: 'absolute', bottom: -1, left: 0, width: 24, height: 3, backgroundColor: '#FFC700', borderRadius: 2 },
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#F4F4F5', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center' },
   cardImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#18181B' },
   cardContent: { flex: 1, marginLeft: 16, justifyContent: 'center' },
-  courseTitle: { fontSize: 15, fontFamily: FONT.h1,
+  courseTitle: { fontSize: 15, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: '#18181B', marginBottom: 4 },
 
   // Learning Card Specifics
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
 
   // Skeleton Loading
   skeletonContainer: { flex: 1, paddingHorizontal: 24 },
-  skeletonStatus: { fontSize: 10, color: '#A1A1AA', fontFamily: FONT.h1, fontWeight: '700', letterSpacing: 1, marginBottom: 16 },
+  skeletonStatus: { fontSize: 10, color: '#A1A1AA', fontFamily: TYPOGRAPHY.h1.fontFamily, fontWeight: '700', letterSpacing: 1, marginBottom: 16 },
   skeletonCard: { backgroundColor: '#F4F4F5', borderRadius: 16, padding: 12, flexDirection: 'row', marginBottom: 16, height: 104 },
   skeletonImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#E4E4E7' },
   skeletonLineShort: { height: 12, width: '40%', backgroundColor: '#E4E4E7', borderRadius: 4, marginBottom: 8, marginLeft: 16 },
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   emptyIconBox: { width: 80, height: 80, backgroundColor: '#F4F4F5', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   gridDots: { width: 32, height: 32, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignContent: 'center' },
   dot: { width: 8, height: 8, backgroundColor: '#E4E4E7', borderRadius: 2 },
-  emptyLabel: { fontSize: 12, fontFamily: FONT.h1,
+  emptyLabel: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: '#3F3F46', letterSpacing: 2 },
   emptyDivider: { fontSize: 14, color: '#A1A1AA', marginVertical: 12, letterSpacing: 4 },
   emptyTitle: { fontSize: 24, fontWeight: '800', color: '#18181B', textAlign: 'center', marginBottom: 32 },

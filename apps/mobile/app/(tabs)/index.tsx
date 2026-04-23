@@ -38,11 +38,7 @@ const TYPOGRAPHY = {
   h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
-};
+
 
 const CATEGORIES = [
   { key: 'SEMUA', label: 'SEMUA', value: undefined },
@@ -313,7 +309,7 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontSize: 16,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     letterSpacing: 1,
@@ -342,7 +338,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, backgroundColor: '#E4E4E7', borderRadius: 2 },
   welcomeSub: {
     fontSize: 10,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 2,
@@ -350,7 +346,7 @@ const styles = StyleSheet.create({
   },
   welcomeTitle: {
     fontSize: 24,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -418,7 +414,7 @@ const styles = StyleSheet.create({
   },
   emptyLabel: {
     fontSize: 12,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: '#3F3F46',
     letterSpacing: 2,
@@ -480,7 +476,7 @@ const styles = StyleSheet.create({
   },
   errorCodeText: {
     fontSize: 10,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -564,7 +560,7 @@ const styles = StyleSheet.create({
   },
   featuredTitle: {
     fontSize: 20,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: '#FFF',
     letterSpacing: 1,
@@ -581,7 +577,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 12,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 2,
@@ -602,7 +598,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 12,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -638,7 +634,7 @@ const styles = StyleSheet.create({
   },
   listCardTitle: {
     fontSize: 15,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 4,

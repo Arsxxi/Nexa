@@ -13,10 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
 // ==========================================
@@ -438,7 +438,7 @@ const stylesEnrolled = StyleSheet.create({
   bannerOverlay: { flex: 1, justifyContent: 'flex-end', padding: 24 },
   tagDark: { backgroundColor: 'rgba(255,255,255,0.2)', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 12 },
   tagDarkText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600', letterSpacing: 1 },
-  bannerTitle: { color: '#FFC700', fontSize: 28, fontFamily: FONT.h1, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
+  bannerTitle: { color: '#FFC700', fontSize: 28, fontFamily: TYPOGRAPHY.h1.fontFamily, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
   bannerSubtitle: { color: '#E4E4E7', fontSize: 14 },
   progressContainer: { padding: 24, backgroundColor: '#FAFAFA' },
   progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },

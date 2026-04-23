@@ -8,16 +8,16 @@ const BADGE_ICONS: Record<string, any> = {
   explore: require('../../assets/images/explore.png'),
   coin: require('../../assets/images/coin.png'),
 };
-import { useUser, useClerk } from '@clerk/clerk-expo';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
 // --- TEMA WARNA NEXA ---
@@ -36,7 +36,7 @@ const COLORS = {
 export default function ProfileScreen() {
   const router = useRouter();
   const { user } = useUser();
-  const { signOut } = useClerk();
+  const { signOut } = useAuth();
   const profileData = useQuery(api.users.getCurrentUserProfile);
   const updateProfile = useMutation(api.users.updateProfile);
 
@@ -54,6 +54,7 @@ export default function ProfileScreen() {
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [helpModalVisible, setHelpModalVisible] = useState(false);
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
   const [nameInput, setNameInput] = useState(profile?.name || '');
   const [avatarInput, setAvatarInput] = useState(profile?.avatarUrl || '');
 
@@ -62,23 +63,16 @@ export default function ProfileScreen() {
     setAvatarInput(profile?.avatarUrl || '');
   }, [profile]);
 
-  const handleSignOut = async () => {
-    Alert.alert('Konfirmasi Keluar', 'Apakah Anda yakin ingin keluar?', [
-      { text: 'Batal', style: 'cancel' },
-      { 
-        text: 'Keluar', 
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            await signOut();
-            router.replace('/(auth)/login');
-          } catch (error) {
-            console.error('Sign out error:', error);
-            Alert.alert('Error', 'Gagal keluar. Silakan coba lagi.');
-          }
-        }
-      },
-    ]);
+  const handleSignOut = () => setLogoutConfirmVisible(true);
+
+  const confirmSignOut = async () => {
+    setLogoutConfirmVisible(false);
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
   };
 
   // Fungsi untuk mendapatkan 2 huruf inisial (Contoh: John Doe -> JD)
@@ -280,6 +274,34 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      <Modal visible={logoutConfirmVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { alignItems: 'center', paddingVertical: 24 }]}>
+            <View style={styles.logoutIconWrap}>
+              <Ionicons name="log-out-outline" size={32} color={COLORS.danger} />
+            </View>
+            <Text style={[styles.modalTitle, { marginTop: 16, textAlign: 'center' }]}>KELUAR?</Text>
+            <Text style={{ color: COLORS.textSecondary, marginTop: 8, textAlign: 'center', fontSize: 14 }}>
+              Apakah Anda yakin ingin keluar dari akun ini?
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
+              <TouchableOpacity
+                onPress={() => setLogoutConfirmVisible(false)}
+                style={[styles.logoutModalBtn, { backgroundColor: COLORS.bgBadge }]}
+              >
+                <Text style={styles.logoutModalBtnText}>BATAL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={confirmSignOut}
+                style={[styles.logoutModalBtn, { backgroundColor: COLORS.danger }]}
+              >
+                <Text style={[styles.logoutModalBtnText, { color: '#fff' }]}>KELUAR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <View style={{ height: 60 }} />
     </ScrollView>
   );
@@ -300,9 +322,9 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 24,
   },
-  headerTitle: { fontSize: 24, fontFamily: FONT.h1,
+  headerTitle: { fontSize: 24, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.text, letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 10, fontFamily: FONT.h1,
+  headerSubtitle: { fontSize: 10, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginTop: 2 },
   settingsBtn: {
     width: 44,
@@ -331,12 +353,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16,
   },
-  avatarText: { fontSize: 24, fontFamily: FONT.h1,
+  avatarText: { fontSize: 24, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.primary, letterSpacing: 1 },
   profileDetails: { flex: 1, justifyContent: 'center' },
-  userName: { fontSize: 18, fontFamily: FONT.h1,
+  userName: { fontSize: 18, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  userEmail: { fontSize: 12, color: COLORS.textSecondary, fontFamily: FONT.h3,
+  userEmail: { fontSize: 12, color: COLORS.textSecondary, fontFamily: TYPOGRAPHY.h3.fontFamily,
     fontWeight: '400', marginBottom: 8 },
   memberBadge: {
     backgroundColor: COLORS.bgBadge,
@@ -345,7 +367,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  memberBadgeText: { fontSize: 9, fontFamily: FONT.h1,
+  memberBadgeText: { fontSize: 9, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1 },
 
   // --- Section General ---
@@ -355,7 +377,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 11,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 2,
@@ -382,12 +404,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  statLabel: { fontSize: 9, fontFamily: FONT.h1,
+  statLabel: { fontSize: 9, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1 },
   statIcon: { fontSize: 14 },
-  statValue: { fontSize: 16, fontFamily: FONT.h1,
+  statValue: { fontSize: 16, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  statSub: { fontSize: 10, fontFamily: FONT.h3,
+  statSub: { fontSize: 10, fontFamily: TYPOGRAPHY.h3.fontFamily,
     fontWeight: '400', color: COLORS.textSecondary },
 
   // --- Menu Pengaturan ---
@@ -411,7 +433,7 @@ const styles = StyleSheet.create({
   },
   menuText: {
     fontSize: 14,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     marginLeft: 12,
@@ -428,7 +450,7 @@ const styles = StyleSheet.create({
     paddingTop: 36,
     paddingBottom: 8,
   },
-  unitText: { fontSize: 12, fontFamily: FONT.h1,
+  unitText: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.dark },
   qrBtn: { padding: 6 },
 
@@ -450,10 +472,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     marginRight: 16,
   },
-  avatarInitial: { fontSize: 28, fontFamily: FONT.h1,
+  avatarInitial: { fontSize: 28, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.dark },
   nameBlock: { flex: 1 },
-  displayName: { fontSize: 22, fontFamily: FONT.h1,
+  displayName: { fontSize: 22, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.dark, marginBottom: 2 },
   handle: { fontSize: 12, color: COLORS.textSecondary, marginBottom: 10 },
   pillsRow: { flexDirection: 'row', gap: 8 },
@@ -466,7 +488,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     marginRight: 8,
   },
-  pillText: { fontSize: 11, fontFamily: FONT.h1,
+  pillText: { fontSize: 11, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary },
 
   levelCard: {
@@ -477,7 +499,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   levelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  levelTitle: { fontSize: 12, fontFamily: FONT.h1,
+  levelTitle: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary },
   levelXp: { fontSize: 11, color: COLORS.textSecondary },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -494,12 +516,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  smallTitle: { fontSize: 11, fontFamily: FONT.h1,
+  smallTitle: { fontSize: 11, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, marginBottom: 8 },
   streakBody: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  streakNumber: { fontSize: 56, fontFamily: FONT.h1,
+  streakNumber: { fontSize: 56, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.primary, width: 90, textAlign: 'center' },
-  streakLabel: { fontSize: 14, fontFamily: FONT.h1,
+  streakLabel: { fontSize: 14, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.text, paddingTop: 10 },
   streakWeekRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 },
   weekItem: { alignItems: 'center', flex: 1 },
@@ -526,7 +548,7 @@ const styles = StyleSheet.create({
   badgeIconInactive: {
     opacity: 0.3,
   },
-  badgeLabel: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8, textAlign: 'center', fontFamily: FONT.h1, fontWeight: '700' },
+  badgeLabel: { fontSize: 11, color: COLORS.textSecondary, marginTop: 8, textAlign: 'center', fontFamily: TYPOGRAPHY.h1.fontFamily, fontWeight: '700' },
 
   settingsList: { marginTop: 6 },
   settingsItem: {
@@ -540,14 +562,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  settingsItemText: { fontSize: 14, fontFamily: FONT.h1, fontWeight: '700', color: COLORS.text },
+  settingsItemText: { fontSize: 14, fontFamily: TYPOGRAPHY.h1.fontFamily, fontWeight: '700', color: COLORS.text },
   logoutBtn: { alignSelf: 'center', marginTop: 18 },
-  logoutText: { color: COLORS.danger, fontFamily: FONT.h1,
+  logoutText: { color: COLORS.danger, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', letterSpacing: 2 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '90%', backgroundColor: '#fff', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border },
-  modalTitle: { fontSize: 16, fontFamily: FONT.h1,
+  modalTitle: { fontSize: 16, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.dark },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
   modalButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: COLORS.bgBadge },
+  logoutIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutModalBtn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  logoutModalBtnText: {
+    fontSize: 13,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: COLORS.textSecondary,
+  },
 });

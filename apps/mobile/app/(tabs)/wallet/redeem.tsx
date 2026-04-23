@@ -6,10 +6,10 @@ import { useRouter } from 'expo-router';
 import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
-const FONT = {
-  h1: 'SpaceGrotesk-Bold',
-  h2: 'nimbus-mono.regular',
-  h3: 'LiberationSans-Regular',
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
 const COLORS = {
@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   
   // Header
   header: { marginBottom: 32 },
-  headerSub: { fontSize: 10, fontFamily: FONT.h1,
+  headerSub: { fontSize: 10, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
   headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -1 },
   balanceInfo: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
   // Form
   formContainer: { marginBottom: 3 },
   inputGroup: { marginBottom: 20 },
-  inputLabel: { fontSize: 10, fontFamily: FONT.h1,
+  inputLabel: { fontSize: 10, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 8 },
   input: {
     borderWidth: 1,
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
 summaryTitle: {
     fontSize: 12,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -594,7 +594,7 @@ summaryTitle: {
   summaryValueTotal: {
     fontSize: 16,
     color: COLORS.primary,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
   },
   summaryDivider: {
@@ -633,7 +633,7 @@ summaryTitle: {
   },
   btnSubmitText: {
     fontSize: 16,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -709,7 +709,7 @@ summaryTitle: {
   },
   paymentTitle: {
     fontSize: 16,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
   },
@@ -754,7 +754,7 @@ summaryTitle: {
   },
   waitingTitle: {
     fontSize: 20,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 8,
@@ -782,7 +782,7 @@ summaryTitle: {
   },
   btnOkText: {
     fontSize: 16,
-    fontFamily: FONT.h1,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
   },
