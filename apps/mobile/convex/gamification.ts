@@ -3,11 +3,11 @@ import { mutation, query, internalMutation } from './_generated/server';
 import { COIN_RULES } from './constants/coinRules';
 
 const BADGES = [
-  { id: 'pemula', name: 'Pemula', icon: '🎯', description: 'Selesaikan 1 course' },
-  { id: 'on_fire', name: 'On Fire', icon: '🔥', description: 'Streak 7 hari' },
-  { id: 'premium', name: 'Premium', icon: '💎', description: 'Beli 1 premium course' },
-  { id: 'master', name: 'Master', icon: '🏆', description: 'Selesaikan 5 course' },
-  { id: 'earner', name: 'Earner', icon: '💰', description: 'Total earn lifetime >= 10.000 coin' },
+  { id: 'pemula', name: 'Pemula', icon: 'pemula', description: 'Selesaikan 1 course' },
+  { id: 'on_fire', name: 'Streak Master', icon: 'streak', description: 'Streak 7 hari' },
+  { id: 'premium', name: 'Quiz King', icon: 'quiz', description: 'Beli 1 premium course' },
+  { id: 'master', name: 'Explorer', icon: 'explore', description: 'Selesaikan 5 course' },
+  { id: 'earner', name: 'Coin Hunter', icon: 'coin', description: 'Total earn lifetime >= 10.000 coin' },
 ];
 
 export const addXP = mutation({
@@ -20,10 +20,17 @@ export const addXP = mutation({
     const user = await ctx.db.get(args.userId);
     if (!user) throw new Error('User not found');
 
-    const newXP = user.xp + args.amount;
-    await ctx.db.patch(args.userId, { xp: newXP });
+    // Compute new XP and determine level based on thresholds
+    const newXP = (user.xp || 0) + args.amount;
 
-    return { xp: newXP };
+    // Example thresholds: level 1 starts at 0, then 1000 XP per level (can be adjusted)
+    const xpPerLevel = 1250; // use 1250 as seen in design
+    const newLevel = Math.max(1, Math.floor(newXP / xpPerLevel) + 1);
+    const xpIntoLevel = newXP - ( (newLevel - 1) * xpPerLevel );
+
+    await ctx.db.patch(args.userId, { xp: newXP, level: newLevel });
+
+    return { xp: newXP, level: newLevel, xpIntoLevel, xpPerLevel };
   },
 });
 

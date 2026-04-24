@@ -6,11 +6,17 @@ import { useCoin } from '@/hooks/useCoin';
 import { useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
+
 type FilterType = 'SEMUA' | 'MASUK' | 'KELUAR';
 
 export default function WalletTabScreen() {
   const router = useRouter();
-  const { balance, transactions, loading } = useCoin();
+  const { balance, transactions, redeemHistory, loading } = useCoin();
   const [filter, setFilter] = useState<FilterType>('SEMUA');
   const resetCoinBalance = useMutation(api.coins.resetCoinBalance);
 
@@ -40,7 +46,28 @@ export default function WalletTabScreen() {
     );
   };
 
-  const filteredTransactions = transactions?.filter((tx) => {
+  const redeemRequestItems = (redeemHistory ?? [])
+    .filter((redeem) => redeem.status !== 'approved')
+    .map((redeem) => ({
+      _id: redeem._id,
+      amount: -redeem.coinAmount,
+      type: 'redeem' as const,
+      note: `Redeem ${redeem.coinAmount.toLocaleString('id-ID')} coin • ${
+        redeem.status === 'pending_payment'
+          ? 'Menunggu verifikasi admin'
+          : redeem.status === 'rejected'
+          ? 'Redeem ditolak'
+          : 'Status tidak diketahui'
+      }`,
+      createdAt: redeem.requestedAt,
+    }));
+
+  const mergedTransactions = [
+    ...(transactions ?? []),
+    ...redeemRequestItems,
+  ].sort((a, b) => b.createdAt - a.createdAt);
+
+  const filteredTransactions = mergedTransactions.filter((tx) => {
     if (filter === 'MASUK') return ['course_complete', 'quiz_bonus', 'streak_bonus'].includes(tx.type);
     if (filter === 'KELUAR') return ['redeem', 'expired'].includes(tx.type);
     return true;
@@ -353,9 +380,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   transactionTextGroup: {
-    gap: 4,
+    
+    padding: 10,
+    
   },
   transactionDesc: {
+    flexShrink: 1,
+    width: '70%',
+    paddingBottom: 7,
     fontSize: 15,
     fontWeight: 'bold',
     color: '#18181B',

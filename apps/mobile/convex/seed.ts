@@ -1,4 +1,16 @@
 import { mutation } from './_generated/server';
+import { v } from 'convex/values';
+
+export const setAdminRole = mutation({
+  args: { email: v.string() },
+  handler: async (ctx, args) => {
+    const allUsers = await ctx.db.query('users').collect();
+    const user = allUsers.find(u => u.email === args.email);
+    if (!user) throw new Error(`User with email ${args.email} not found`);
+    await ctx.db.patch(user._id, { role: 'admin' });
+    return { message: `${args.email} is now admin`, userId: user._id };
+  },
+});
 
 const quizPool: Record<string, Array<{ question: string; options: string[]; correctIndex: number }>> = {
   react: [
@@ -53,10 +65,10 @@ const quizPool: Record<string, Array<{ question: string; options: string[]; corr
 
 const freeCourses = [
   {
-    title: 'Belajar React Native untuk Pemula',
-    description: 'Pelajari dasar-dasar pengembangan aplikasi mobile dengan React Native dari nol.',
+    title: 'Simple Health Education',
+    description: 'How To Perform CPR',
     thumbnailUrl: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=400',
-    category: 'Teknologi',
+    category: 'Kesehatan',
     type: 'free' as const,
     price: 0,
     coinReward: 50,
@@ -64,9 +76,9 @@ const freeCourses = [
     isPublished: true,
     quizKey: 'react',
     lessons: [
-      { title: 'Pengenalan React Native', videoUrl: 'https://www.youtube.com/watch?v=1GJwUgTqPmE', duration: 600 },
-      { title: 'Komponen & Props', videoUrl: 'https://www.youtube.com/watch?v=SBwm9F0nT1g', duration: 720 },
-      { title: 'State & Hook', videoUrl: 'https://www.youtube.com/watch?v=O6P86uw5R0s', duration: 840 },
+      { title: 'How To Perform A CPR', videoUrl: 'https://res.cloudinary.com/dotnuriq8/video/upload/v1776663247/Part_1_How_To_Perform_CPR_A_Step_By_Step_Guide_Resuscitation_CPR_First_Aid_Training_-_Get_Licensed_-_Frontline_Security_720p_h264_u8etq6.mp4', duration: 600 },
+      { title: 'How To Threat Burns', videoUrl: 'https://res.cloudinary.com/dotnuriq8/video/upload/v1776662752/Part_2_How_to_Treat_Burns_and_Scalds_Essential_First_Aid_Tips_bjp8kw.mp4', duration: 720 },
+      { title: 'Basic First AId', videoUrl: 'https://res.cloudinary.com/dotnuriq8/video/upload/v1776662754/Part_3_Learn_Basic_First_Aid_How_to_Use_an_AED_Step-by-Step_Guide_pvxbhm.mp4', duration: 840 },
     ],
   },
   {
@@ -205,7 +217,6 @@ export const seedDatabase = mutation({
 
     for (const courseData of allCourses) {
       const { quizKey, lessons, ...courseFields } = courseData;
-
       const courseId = await ctx.db.insert('courses', courseFields);
 
       for (let i = 0; i < lessons.length; i++) {
@@ -224,5 +235,45 @@ export const seedDatabase = mutation({
     }
 
     return { message: 'Seeded successfully', courses: courseIds.length };
+  },
+});
+
+export const seedTestUserProgress = mutation({
+  handler: async (ctx) => {
+    const allUsers = await ctx.db.query('users').collect();
+    const testUser = allUsers.find(u => u.email === 'pier.testing@gmail.com');
+    const adminUser = allUsers.find(u => u.email === 'admin@gmail.com');
+
+    if (!testUser) return { error: 'User pier.testing@gmail.com not found' };
+    if (!adminUser) return { error: 'User admin@gmail.com not found' };
+
+    await ctx.db.patch(adminUser._id, { role: 'admin' });
+
+    const allCourses = await ctx.db.query('courses').collect();
+    const course1 = allCourses.find(c => c.title === 'Simple Health Education');
+    const course2 = allCourses.find(c => c.title === 'TypeScript Dasar hingga Mahir');
+    const course3 = allCourses.find(c => c.title === 'Expo Router: Navigasi Modern');
+
+    if (!course1 || !course2 || !course3) return { error: 'Courses not found' };
+
+    await ctx.db.insert('enrollments', { userId: testUser._id, courseId: course1._id, enrolledAt: Date.now(), coinRewarded: true, completedAt: Date.now() });
+    await ctx.db.insert('enrollments', { userId: testUser._id, courseId: course2._id, enrolledAt: Date.now(), coinRewarded: false });
+    await ctx.db.insert('enrollments', { userId: testUser._id, courseId: course3._id, enrolledAt: Date.now(), coinRewarded: false });
+
+    const lessons1 = await ctx.db.query('lessons').withIndex('by_course', q => q.eq('courseId', course1._id)).collect();
+    const lessons2 = await ctx.db.query('lessons').withIndex('by_course', q => q.eq('courseId', course2._id)).collect();
+    const lessons3 = await ctx.db.query('lessons').withIndex('by_course', q => q.eq('courseId', course3._id)).collect();
+
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons1[0]._id, watchedSeconds: 600, isCompleted: true });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons1[1]._id, watchedSeconds: 720, isCompleted: true });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons1[2]._id, watchedSeconds: 840, isCompleted: true, quizScore: 100 });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons2[0]._id, watchedSeconds: 480, isCompleted: true });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons2[1]._id, watchedSeconds: 300, isCompleted: false });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons2[2]._id, watchedSeconds: 0, isCompleted: false });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons3[0]._id, watchedSeconds: 540, isCompleted: true });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons3[1]._id, watchedSeconds: 660, isCompleted: true });
+    await ctx.db.insert('progress', { userId: testUser._id, lessonId: lessons3[2]._id, watchedSeconds: 780, isCompleted: false });
+
+    return { message: 'Progress seeded successfully' };
   },
 });

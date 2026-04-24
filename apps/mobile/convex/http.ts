@@ -283,4 +283,94 @@ http.route({
   }),
 });
 
+// ✅ NEW: Webhook for redeem payment notifications from Midtrans
+// Handles payment status updates for coin redemption
+http.route({
+  path: '/midtrans-redeem-webhook',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const body = await request.json();
+
+    const orderId = body.order_id;
+    const transactionStatus = body.transaction_status;
+    const statusCode = body.status_code;
+    const grossAmount = body.gross_amount;
+    const signatureKey = body.signature_key;
+
+    // Verify signature
+    if (signatureKey) {
+      const isValid = await verifySignature(
+        orderId,
+        statusCode,
+        grossAmount.toString(),
+        signatureKey
+      );
+      if (!isValid) {
+        console.error('Invalid signature for redeem webhook:', orderId);
+        return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    try {
+      // Update redeem payment status
+      await ctx.runMutation(internal.payments.handleRedeemPaymentCallback, {
+        orderId,
+        transactionStatus,
+        grossAmount,
+      });
+
+      console.log(`Redeem payment webhook processed: ${orderId} - ${transactionStatus}`);
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('Redeem webhook processing error:', error);
+      return new Response(JSON.stringify({ error: 'Webhook processing failed', details: (error as Error).message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
+http.route({
+  path: '/xendit/disbursement-callback',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    const callbackToken = request.headers.get('x-callback-token');
+    const XENDIT_WEBHOOK_TOKEN = process.env.XENDIT_WEBHOOK_TOKEN;
+
+    if (XENDIT_WEBHOOK_TOKEN && callbackToken !== XENDIT_WEBHOOK_TOKEN) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
+    try {
+      const body = await request.json();
+      if (body.external_id?.startsWith('NEXA-REDEEM-')) {
+        await ctx.runMutation(internal.payments.handleXenditCallback, {
+          externalId: body.external_id,
+          status: body.status,
+          failureCode: body.failure_code ?? undefined,
+        });
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error: any) {
+      console.error('Xendit callback error:', error);
+      return new Response(JSON.stringify({ error: 'Callback processing failed' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  }),
+});
+
 export default http;

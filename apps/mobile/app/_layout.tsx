@@ -1,63 +1,81 @@
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Slot, useRouter, usePathname } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { ConvexClerkProvider } from '../app_providers';
 import { useAuth } from '@clerk/clerk-expo';
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useFonts } from 'expo-font';
+import { useQuery } from 'convex/react';
+import { api } from '@convex/_generated/api';
+
+const FONT_FILES = {
+  'SpaceGrotesk-Bold': require('../assets/Fonts/SpaceGrotesk-Bold.ttf'),
+  'nimbus-mono.regular': require('../assets/Fonts/nimbus-mono.regular.otf'),
+  'LiberationSans-Regular': require('../assets/Fonts/LiberationSans-Regular.ttf'),
+};
 
 function Loading() {
   return (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator size="large" color="#6C63FF" />
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' }}>
+      <ActivityIndicator size="large" color="#FFC800" />
     </View>
   );
 }
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+function AppShell() {
+  const [fontsError, setFontsError] = useState(false);
+  const [fontsLoaded, error] = useFonts(FONT_FILES);
   const { isLoaded, isSignedIn } = useAuth();
-  const segments = useSegments();
+  const pathname = usePathname();
   const router = useRouter();
+  const hasRedirectedRef = useRef(false);
+  const userData = useQuery(api.users.getCurrentUser);
+
+  useEffect(() => {
+    if (error) {
+      console.error('Font loading error:', error);
+      setFontsError(true);
+    }
+  }, [error]);
 
   useEffect(() => {
     if (!isLoaded) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const inProtectedRoute = ['admin', '(admin)', 'course', 'payment'].includes(String(segments[0]));
-
-    // Redirect unsigned users to login
     if (!isSignedIn) {
-      if (inAuthGroup) {
-        // Already in auth group, stay there
-        return;
+      if (!pathname.startsWith('/(auth)')) {
+        router.replace('/(auth)/login');
       }
-      // Redirect to login if trying to access protected routes
-      router.replace('/(auth)/login');
+      hasRedirectedRef.current = false;
       return;
     }
 
-    // Redirect signed-in users away from auth pages
-    if (isSignedIn && inAuthGroup) {
-      router.replace('/(tabs)');
-      return;
+    if (isSignedIn && !hasRedirectedRef.current && userData !== undefined) {
+      hasRedirectedRef.current = true;
+      const role = userData?.role ?? 'user';
+      if (role === 'admin') {
+        router.replace('/(admin)/redeem');
+      } else {
+        router.replace('/(tabs)');
+      }
     }
-  }, [isSignedIn, segments, isLoaded]);
+  }, [isSignedIn, pathname, isLoaded, userData]);
 
-  if (!isLoaded) {
+  if ((!fontsLoaded && !fontsError) || !isLoaded) {
     return <Loading />;
   }
 
-  return <>{children}</>;
+  return (
+    <View style={{ flex: 1 }}>
+      <Slot />
+    </View>
+  );
 }
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ConvexClerkProvider>
-        <AuthGuard>
-          <View style={{ flex: 1 }}>
-            <Slot />
-          </View>
-        </AuthGuard>
+        <AppShell />
       </ConvexClerkProvider>
     </GestureHandlerRootView>
   );

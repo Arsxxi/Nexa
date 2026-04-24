@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
-import { mutation, query, internalQuery, internalMutation, action } from './_generated/server';
+import { mutation, query, internalQuery, internalMutation, action, internalAction } from './_generated/server';
+import { internal } from './_generated/api';
 
 // ✅ FIXED: Add authorization check + remove type casting
 export const getByUser = query({
@@ -247,7 +248,7 @@ export const getPaymentStatus = action({
   },
 });
 
-export const createDisburseOrder = action({
+export const createDisburseOrder = internalAction({
   args: {
     userId: v.id('users'),
     redeemId: v.id('redeemRequests'),
@@ -257,53 +258,282 @@ export const createDisburseOrder = action({
     accountHolderName: v.string(),
   },
   handler: async (ctx, args) => {
-    const user = await (ctx as any).db.get(args.userId);
-    if (!user) throw new Error('User not found');
+    const XENDIT_SECRET_KEY = process.env.XENDIT_SECRET_KEY;
+    if (!XENDIT_SECRET_KEY) throw new Error('XENDIT_SECRET_KEY not configured');
 
-    const timestamp = Date.now();
-    const referenceNo = `REDEEM-${args.redeemId}-${timestamp}`;
+    const externalId = `NEXA-REDEEM-${args.redeemId}-${Date.now()}`;
 
-    // Midtrans Iris API for disbursements
-    const irisBaseUrl = 'https://app.sandbox.midtrans.com/iris/api/v1';
-    const irisApiKey = process.env.MIDTRANS_IRIS_API_KEY || MIDTRANS_SERVER_KEY; // May need separate key
-
-    const disburseBody = {
-      reference_no: referenceNo,
-      beneficiary_name: args.accountHolderName,
-      beneficiary_account: args.accountNumber,
-      beneficiary_bank: args.bankCode,
-      beneficiary_email: user.email,
-      amount: args.amount.toString(),
-      notes: `Coin redemption payout for ${user.name}`,
-    };
-
-    const response = await fetch(`${irisBaseUrl}/disburse`, {
+    const response = await fetch('https://api.xendit.co/disbursements', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Basic ${base64Encode(irisApiKey + ':')}`,
+        'Authorization': `Basic ${btoa(XENDIT_SECRET_KEY + ':')}`,
+        'X-IDEMPOTENCY-KEY': externalId,
       },
-      body: JSON.stringify(disburseBody),
+      body: JSON.stringify({
+        external_id: externalId,
+        amount: args.amount,
+        bank_code: args.bankCode.toUpperCase(),
+        account_holder_name: args.accountHolderName,
+        account_number: args.accountNumber,
+        description: `Pencairan koin Nexa - ${externalId}`,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(`Xendit error: ${data.message || data.error_code || 'Unknown error'}`);
+    }
+
+    await ctx.runMutation(internal.payments.updateDisburseStatus, {
+      redeemId: args.redeemId,
+      externalId,
+      xenditDisbursementId: data.id,
+      status: data.status ?? 'PENDING',
+    });
+
+    return {
+      externalId,
+      xenditId: data.id,
+      status: data.status,
+    };
+  },
+});
+
+export const updateDisburseStatus = internalMutation({
+  args: {
+    redeemId: v.id('redeemRequests'),
+    externalId: v.string(),
+    xenditDisbursementId: v.string(),
+    status: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.redeemId, {
+      disburseReference: args.externalId,
+      disburseStatus: args.status,
+      disbursedAt: Date.now(),
+    });
+  },
+});
+
+export const handleXenditCallback = internalMutation({
+  args: {
+    externalId: v.string(),
+    status: v.string(),
+    failureCode: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const allRequests = await ctx.db.query('redeemRequests').collect();
+    const req = allRequests.find(r => r.disburseReference === args.externalId);
+    if (!req) return;
+
+    await ctx.db.patch(req._id, {
+      disburseStatus: args.status,
+      disburseError: args.failureCode,
+    });
+
+    if (args.status === 'FAILED') {
+      const user = await ctx.db.get(req.userId);
+      if (user) {
+        await ctx.db.patch(req.userId, {
+          coinBalance: user.coinBalance + req.coinAmount,
+        });
+        await ctx.db.insert('coinTransactions', {
+          userId: req.userId,
+          amount: req.coinAmount,
+          type: 'redeem',
+          isExpired: false,
+          note: `Transfer gagal (${args.failureCode ?? 'unknown'}) - coin dikembalikan otomatis`,
+          createdAt: Date.now(),
+        });
+      }
+    }
+  },
+});
+
+// Handles: Bank Transfer + QRIS via Midtrans Virtual Account
+export const createRedeemPayment = action({
+  args: {
+    redeemId: v.id('redeemRequests'),
+    coinAmount: v.number(),
+    rupiahAmount: v.number(),
+    bankCode: v.string(),
+    accountNumber: v.string(),
+    accountHolderName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const redeem = await ctx.runQuery(internal.coins.getRedeemRequestById, {
+      redeemId: args.redeemId,
+    });
+    if (!redeem) throw new Error('Redeem request not found');
+
+    const user = await ctx.runQuery(internal.coins.getUserById, {
+      userId: redeem.userId,
+    });
+    if (!user) throw new Error('User not found');
+
+    // Create Midtrans order ID for redeem (different format from course payments)
+    const timestamp = Date.now();
+    const orderId = `REDEEM-${args.redeemId.slice(0, 8)}-${timestamp}`;
+
+    // Midtrans VT-Web Payment Page body
+    // This enables Bank Transfer + QRIS payment options
+    const midtransBody = {
+      transaction_details: {
+        order_id: orderId,
+        gross_amount: Math.floor(args.rupiahAmount), // Must be integer
+      },
+      customer_details: {
+        first_name: user.name || 'Customer',
+        email: user.email,
+      },
+      item_details: [
+        {
+          id: args.redeemId,
+          price: Math.floor(args.rupiahAmount),
+          quantity: 1,
+          name: `Redeem ${args.coinAmount.toLocaleString()} Coins`,
+        },
+      ],
+      // Bank Transfer + QRIS (Virtual Account)
+      payment_type: 'bank_transfer',
+      bank_transfer: {
+        bank: args.bankCode.toUpperCase(), // Will be mapped to bank in redirect
+      },
+      // Allow both virtual account and QRIS
+      enabled_payments: ['bank_transfer', 'qris'],
+      // Specific bank code for redirect
+      vt_web: {
+        enabled_payments: ['bank_transfer', 'qris'],
+      },
+    };
+
+    // Create Snap transaction (VT-Web Payment Page)
+    const response = await fetch(`${MIDTRANS_BASE_URL}/snap/v1/transactions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${getMidtransAuth()}`,
+      },
+      body: JSON.stringify(midtransBody),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Midtrans Iris disburse error: ${errorText}`);
+      throw new Error(`Midtrans API error: ${errorText}`);
     }
 
     const responseData = await response.json();
+    const snapToken = responseData.token;
+    const redirectUrl = responseData.redirect_url;
 
-    // Update redeem request with disburse info
-    await (ctx as any).db.patch(args.redeemId, {
-      disburseReference: referenceNo,
-      disburseStatus: 'pending',
-      disbursedAt: Date.now(),
+    // Update redeem request with Midtrans order details
+    await ctx.runMutation(internal.coins.updateRedeemRequestPaymentInfo, {
+      redeemId: args.redeemId,
+      midtransOrderId: orderId,
+      midtransSnapToken: snapToken,
+      paymentStatus: 'pending',
     });
 
     return {
-      referenceNo,
-      status: responseData.status,
-      fee: responseData.fee,
+      snapToken,
+      orderId,
+      redirectUrl,
+      rupiahAmount: args.rupiahAmount,
+    };
+  },
+});
+
+// ✅ NEW: Handle Midtrans redeem payment callback (webhook)
+// Called when user completes payment (paid/settlement)
+export const handleRedeemPaymentCallback = internalMutation({
+  args: {
+    orderId: v.string(),
+    transactionStatus: v.string(),
+    grossAmount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // Find redeem request by Midtrans order ID
+    const redeem = await ctx.db
+      .query('redeemRequests')
+      .withIndex('by_midtrans_order', (q) =>
+        q.eq('midtransOrderId', args.orderId)
+      )
+      .first();
+
+    if (!redeem) throw new Error('Redeem request not found');
+
+    // Update payment status based on Midtrans transaction status
+    let newPaymentStatus: 'paid' | 'pending' | 'failed' | 'expired' = 'pending';
+
+    if (args.transactionStatus === 'settlement' || args.transactionStatus === 'capture') {
+      newPaymentStatus = 'paid';
+    } else if (args.transactionStatus === 'pending') {
+      newPaymentStatus = 'pending';
+    } else if (
+      args.transactionStatus === 'deny' ||
+      args.transactionStatus === 'cancel' ||
+      args.transactionStatus === 'expired'
+    ) {
+      newPaymentStatus = 'failed';
+    }
+
+    await ctx.db.patch(redeem._id, {
+      paymentStatus: newPaymentStatus,
+      paidAt: newPaymentStatus === 'paid' ? Date.now() : undefined,
+      status: newPaymentStatus === 'paid' ? 'approved' : redeem.status,
+    });
+
+    // If payment successful, process auto-disburse
+    if (newPaymentStatus === 'paid') {
+      // Automatically trigger disburse to user's bank account
+      try {
+        await ctx.runAction(internal.payments.createDisburseOrder, {
+          bankCode: redeem.bankCode,
+          accountNumber: redeem.accountNumber,
+          accountHolderName: redeem.accountHolderName,
+        });
+      } catch (error) {
+        console.error('Auto-disburse failed:', error);
+        await ctx.db.patch(redeem._id, {
+          disburseError: (error as Error).message,
+        });
+      }
+    }
+
+    return redeem._id;
+  },
+});
+
+// ✅ NEW: Get redeem payment status from Midtrans
+export const getRedeemPaymentStatus = action({
+  args: {
+    orderId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const response = await fetch(
+      `${MIDTRANS_BASE_URL}/v2/${args.orderId}/status`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${getMidtransAuth()}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error('Failed to get redeem payment status from Midtrans');
+    }
+
+    const data = await response.json();
+    return {
+      status: data.transaction_status,
+      amount: data.gross_amount,
+      paymentType: data.payment_type,
+      paymentMethod: data.payment_method,
+      vaNumber: data.va_numbers ? data.va_numbers[0]?.va_number : null,
+      qrCode: data.qr_string, // QRIS code if available
     };
   },
 });

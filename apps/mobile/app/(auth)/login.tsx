@@ -10,8 +10,14 @@ import {
   ScrollView,
   ActivityIndicator,
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import { useSignIn } from '@clerk/clerk-expo';
+
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
 
 const COLORS = {
   primary: '#FFC800',
@@ -66,7 +72,6 @@ export default function LoginScreen() {
         identifier: email,
         password,
       });
-      router.replace('/(tabs)');
     } catch (err: any) {
       const message = err.errors?.[0]?.message || '';
       if (message.includes('identifier') || message.includes('password')) {

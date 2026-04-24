@@ -181,6 +181,21 @@ export const checkAndCompleteCourse = internalMutation({
   },
 });
 
+export const getLessonProgress = query({
+  args: {
+    userId: v.id('users'),
+    lessonId: v.id('lessons'),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('progress')
+      .withIndex('by_user_lesson', (q) =>
+        q.eq('userId', args.userId).eq('lessonId', args.lessonId)
+      )
+      .first();
+  },
+});
+
 export const getEnrollmentsWithProgress = query({
   args: { userId: v.id('users') },
   handler: async (ctx, args) => {

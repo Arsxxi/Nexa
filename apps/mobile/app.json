@@ -10,10 +10,18 @@
     "newArchEnabled": true,
     "extra": {
       "CONVEX_URL": "https://limitless-ermine-877.convex.cloud",
-      "CLERK_PUBLISHABLE_KEY": "pk_test_Y3J1Y2lhbC1pbnNlY3QtOTcuY2xlcmsuYWNjb3VudHMuZGV2JA"
+      "CLERK_PUBLISHABLE_KEY": "pk_test_Y3J1Y2lhbC1pbnNlY3QtOTcuY2xlcmsuYWNjb3VudHMuZGV2JA",
+      "router": {},
+      "eas": {
+        "projectId": "9855a7e0-6bb1-40c3-bc63-0c858880fdc3"
+      }
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.arsxxi.nexa",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,7 +31,11 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "output": "single",
@@ -43,7 +55,9 @@
           }
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-audio",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

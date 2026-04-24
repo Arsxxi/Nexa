@@ -1,54 +1,23 @@
-import { useState, useEffect } from 'react';
-
-interface ProgressData {
-  courseId: string;
-  completedLessons: string[];
-  totalLessons: number;
-  percentage: number;
-}
+import { useQuery } from 'convex/react';
+import { api } from '@convex/_generated/api';
 
 export function useProgress(courseId?: string) {
-  const [progress, setProgress] = useState<ProgressData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const currentUser = useQuery(api.users.getCurrentUser);
+  
+  const enrollmentsData = useQuery(
+    api.progress.getEnrollmentsWithProgress,
+    currentUser ? { userId: currentUser._id } : 'skip'
+  );
 
-  useEffect(() => {
-    if (!courseId) {
-      setLoading(false);
-      return;
-    }
+  const courseProgress = enrollmentsData?.find(
+    (e: any) => e.courseId === courseId
+  );
 
-    // TODO: Replace with Convex query
-    const fetchProgress = async () => {
-      setLoading(true);
-      try {
-        setProgress({
-          courseId,
-          completedLessons: ['l1'],
-          totalLessons: 12,
-          percentage: 8,
-        });
-      } catch (error) {
-        console.error('Failed to fetch progress:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProgress();
-  }, [courseId]);
-
-  const markLessonComplete = async (lessonId: string) => {
-    // TODO: Call Convex mutation
-    if (progress) {
-      setProgress({
-        ...progress,
-        completedLessons: [...progress.completedLessons, lessonId],
-        percentage: Math.round(
-          ((progress.completedLessons.length + 1) / progress.totalLessons) * 100
-        ),
-      });
-    }
+  return {
+    progress: courseProgress ?? null,
+    loading: enrollmentsData === undefined,
+    progressPercent: courseProgress?.progressPercent ?? 0,
+    completedLessons: courseProgress?.completedLessons ?? 0,
+    totalLessons: courseProgress?.totalLessons ?? 0,
   };
-
-  return { progress, loading, markLessonComplete };
 }

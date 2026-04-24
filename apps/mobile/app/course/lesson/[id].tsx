@@ -1,140 +1,175 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '@convex/_generated/api';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { QuizModal } from '@/components/QuizModal';
+
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
 
 export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const [lesson, setLesson] = useState<any>(null);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [completed, setCompleted] = useState(false);
 
-  useEffect(() => {
-    // TODO: Replace with Convex query
-    setLesson({
-      _id: id,
-      title: 'Introduction to React Native',
-      description: 'In this lesson, we will cover the basics of React Native and how to set up your development environment.',
-      videoUrl: 'https://example.com/video.mp4',
-      courseId: '1',
-      hasQuiz: true,
-      quiz: {
-        question: 'What is React Native?',
-        options: [
-          'A web framework',
-          'A mobile framework',
-          'A database',
-          'A CSS library',
-        ],
-        correctAnswer: 1,
-      },
-    });
-  }, [id]);
+  const lesson = useQuery(api.lessons.getById, { id: id as any });
+  const currentUser = useQuery(api.users.getCurrentUser);
 
-  const handleVideoEnd = () => {
-    if (lesson?.hasQuiz) {
+  const userProgress = useQuery(
+    api.progress.getLessonProgress,
+    currentUser && lesson 
+      ? { userId: currentUser._id, lessonId: lesson._id } 
+      : 'skip'
+  );
+
+  const updateProgressMutation = useMutation(api.progress.updateProgress);
+  const completeLessonMutation = useMutation(api.progress.completeLesson);
+  const submitQuizMutation = useMutation(api.progress.submitQuiz);
+
+  const handleProgress = useCallback(async (watchedSeconds: number) => {
+    if (!currentUser || !lesson) return;
+    try {
+      await updateProgressMutation({
+        userId: currentUser._id,
+        lessonId: lesson._id,
+        watchedSeconds,
+      });
+    } catch (e) {
+      console.error('Update progress error:', e);
+    }
+  }, [currentUser, lesson, updateProgressMutation]);
+
+  const handleVideoEnd = async () => {
+    if (!currentUser || !lesson) return;
+
+    if (lesson.quizQuestions && lesson.quizQuestions.length > 0) {
       setShowQuiz(true);
     } else {
-      markComplete();
+      try {
+        await completeLessonMutation({
+          userId: currentUser._id,
+          lessonId: lesson._id,
+          watchedSeconds: lesson.duration,
+        });
+      } catch (e: any) {
+        console.error('Complete lesson error:', e.message);
+      }
     }
   };
 
-  const markComplete = async () => {
-    // TODO: Call Convex mutation to mark lesson complete
-    setCompleted(true);
-  };
-
-  const handleQuizComplete = (correct: boolean) => {
+  const handleQuizComplete = async (correct: boolean) => {
     setShowQuiz(false);
-    if (correct) {
-      markComplete();
+    if (!currentUser || !lesson) return;
+
+    const score = correct ? 100 : 0;
+    try {
+      await submitQuizMutation({
+        userId: currentUser._id,
+        lessonId: lesson._id,
+        score,
+      });
+    } catch (e) {
+      console.error('Submit quiz error:', e);
     }
   };
 
-  if (!lesson) {
+  if (lesson === undefined || currentUser === undefined) {
     return (
-      <View style={styles.container}>
-        <Text>Loading...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFC800" />
       </View>
     );
   }
+
+  if (!lesson) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text>Lesson tidak ditemukan</Text>
+      </View>
+    );
+  }
+
+  const isCompleted = userProgress?.isCompleted ?? false;
+  const watchedPercent = lesson.duration > 0
+    ? Math.min(100, Math.round(((userProgress?.watchedSeconds ?? 0) / lesson.duration) * 100))
+    : 0;
 
   return (
     <View style={styles.container}>
       <VideoPlayer
         url={lesson.videoUrl}
+        lessonId={lesson._id}
+        userId={currentUser._id}
+        duration={lesson.duration}
+        onProgress={handleProgress}
         onEnd={handleVideoEnd}
       />
 
-      <View style={styles.content}>
-        <Text style={styles.title}>{lesson.title}</Text>
-        <Text style={styles.description}>{lesson.description}</Text>
-
-        {completed && (
+      <ScrollView style={styles.content}>
+        {isCompleted && (
           <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>Lesson Completed!</Text>
+            <Text style={styles.completedText}>✓ Lesson Selesai</Text>
           </View>
         )}
+
+        {!isCompleted && watchedPercent > 0 && (
+          <View style={styles.progressInfo}>
+            <Text style={styles.progressText}>
+              Sudah ditonton: {watchedPercent}% 
+              {watchedPercent < 80 ? ' (butuh 80% untuk selesai)' : ' ✓'}
+            </Text>
+          </View>
+        )}
+
+        <Text style={styles.title}>{lesson.title}</Text>
 
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>Back to Course</Text>
+          <Text style={styles.backButtonText}>← Kembali ke Course</Text>
         </TouchableOpacity>
-      </View>
+      </ScrollView>
 
-      <QuizModal
-        visible={showQuiz}
-        quiz={lesson.quiz}
-        onClose={() => setShowQuiz(false)}
-        onComplete={handleQuizComplete}
-      />
+      {lesson.quizQuestions && (
+        <QuizModal
+          visible={showQuiz}
+          quiz={{
+            question: lesson.quizQuestions[0]?.question ?? '',
+            options: lesson.quizQuestions[0]?.options ?? [],
+            correctAnswer: lesson.quizQuestions[0]?.correctIndex ?? 0,
+          }}
+          onClose={() => setShowQuiz(false)}
+          onComplete={handleQuizComplete}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  content: {
-    padding: 16,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 12,
-  },
-  description: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
+  container: { flex: 1, backgroundColor: '#fff' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  content: { padding: 16 },
+  title: { fontSize: 20, fontWeight: '700', color: '#18181B', marginBottom: 16 },
   completedBadge: {
-    backgroundColor: '#d1fae5',
-    padding: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 16,
+    backgroundColor: '#D1FAE5', padding: 12,
+    borderRadius: 8, alignItems: 'center', marginBottom: 12,
   },
-  completedText: {
-    color: '#065f46',
-    fontWeight: '600',
+  completedText: { color: '#065F46', fontWeight: '700' },
+  progressInfo: {
+    backgroundColor: '#FEF3C7', padding: 10,
+    borderRadius: 8, marginBottom: 12,
   },
+  progressText: { color: '#92400E', fontSize: 13, fontWeight: '600' },
   backButton: {
-    backgroundColor: '#6366f1',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
+    backgroundColor: '#FFC800', borderRadius: 12,
+    padding: 16, alignItems: 'center', marginTop: 8,
   },
-  backButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  backButtonText: { color: '#18181B', fontSize: 15, fontWeight: '700' },
 });
