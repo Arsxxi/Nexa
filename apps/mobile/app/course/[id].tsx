@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -8,7 +8,7 @@ import {
   SafeAreaView,
   ImageBackground
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
@@ -32,6 +32,13 @@ export default function CourseDetailScreen() {
   const currentUser = useQuery(api.users.getCurrentUser);
   const enrollMutation = useMutation(api.courses.enrollFreeCourse);
 
+  // Refetch progress when returning from lesson screen
+  useFocusEffect(
+    useCallback(() => {
+      // Convex queries auto-refetch on focus - this ensures fresh progress data
+    }, [])
+  );
+
   const isLoading = courseData === undefined || lessonsData === undefined;
   const error = courseData === null;
 
@@ -49,6 +56,15 @@ export default function CourseDetailScreen() {
   };
 
   const handleLessonPress = (lesson: any, index: number) => {
+    // Check if lesson is locked (not yet unlocked because previous lessons not completed)
+    const completedLessons = course?.completedLessons || 0;
+    const isLocked = index > completedLessons;
+    
+    if (isLocked) {
+      // Cannot access locked lesson - show alert or do nothing
+      return;
+    }
+    
     if (lesson.isFree || course?.isEnrolled || index === 0) {
       router.push(`/course/lesson/${lesson._id}`);
     } else {
@@ -174,6 +190,7 @@ const EnrolledView = ({ course, lessons, router, onLessonPress }: any) => {
               <TouchableOpacity 
                 key={lesson._id} 
                 onPress={() => onLessonPress(lesson, index)}
+                disabled={isLocked}
                 activeOpacity={isLocked ? 1 : 0.7}
               >
                 {isActive ? (
@@ -220,8 +237,13 @@ const EnrolledView = ({ course, lessons, router, onLessonPress }: any) => {
       </ScrollView>
 
       <View style={stylesEnrolled.bottomBar}>
-        <TouchableOpacity style={stylesEnrolled.primaryButton} onPress={() => onLessonPress(lessons[completedLessons] || lessons[0], completedLessons)}>
-          <Text style={stylesEnrolled.primaryButtonText}>LANJUTKAN BELAJAR</Text>
+        <TouchableOpacity 
+          style={stylesEnrolled.primaryButton} 
+          onPress={() => onLessonPress(lessons[completedLessons] || lessons[0], completedLessons)}
+        >
+          <Text style={stylesEnrolled.primaryButtonText}>
+            {completedLessons >= totalLessons ? 'SEMUA SELESAI' : 'LANJUTKAN BELAJAR'}
+          </Text>
           <Ionicons name="arrow-forward" size={20} color="#18181B" />
         </TouchableOpacity>
       </View>

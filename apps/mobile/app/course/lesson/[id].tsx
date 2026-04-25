@@ -16,6 +16,7 @@ export default function LessonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [showQuiz, setShowQuiz] = useState(false);
+  const [actualDuration, setActualDuration] = useState(0);
 
   const lesson = useQuery(api.lessons.getById, { id: id as any });
   const currentUser = useQuery(api.users.getCurrentUser);
@@ -44,18 +45,35 @@ export default function LessonScreen() {
     }
   }, [currentUser, lesson, updateProgressMutation]);
 
+  const handleDurationChange = useCallback((newDuration: number) => {
+    console.log('[LessonScreen] Received actual duration:', newDuration);
+    setActualDuration(newDuration);
+  }, []);
+
   const handleVideoEnd = async () => {
+    console.log('[LessonScreen] handleVideoEnd called. quizQuestions:', lesson?.quizQuestions);
     if (!currentUser || !lesson) return;
 
-    if (lesson.quizQuestions && lesson.quizQuestions.length > 0) {
+    // More robust quiz detection
+    const hasQuiz = lesson?.quizQuestions && 
+                  Array.isArray(lesson.quizQuestions) && 
+                  lesson.quizQuestions.length > 0 &&
+                  lesson.quizQuestions[0]?.question;
+
+    console.log('[LessonScreen] hasQuiz:', hasQuiz);
+
+    if (hasQuiz) {
+      console.log('[LessonScreen] Showing quiz modal');
       setShowQuiz(true);
     } else {
+      console.log('[LessonScreen] No quiz, completing lesson directly');
       try {
         await completeLessonMutation({
           userId: currentUser._id,
           lessonId: lesson._id,
-          watchedSeconds: lesson.duration,
+          watchedSeconds: actualDuration > 0 ? actualDuration : lesson.duration,
         });
+        console.log('[LessonScreen] Lesson completed successfully');
       } catch (e: any) {
         console.error('Complete lesson error:', e.message);
       }
@@ -68,11 +86,21 @@ export default function LessonScreen() {
 
     const score = correct ? 100 : 0;
     try {
+      console.log('[LessonScreen] Submitting quiz with score:', score);
       await submitQuizMutation({
         userId: currentUser._id,
         lessonId: lesson._id,
         score,
       });
+      
+      // After quiz, mark lesson as complete
+      console.log('[LessonScreen] Marking lesson as complete after quiz');
+      await completeLessonMutation({
+        userId: currentUser._id,
+        lessonId: lesson._id,
+        watchedSeconds: actualDuration > 0 ? actualDuration : lesson.duration,
+      });
+      console.log('[LessonScreen] Lesson completed after quiz');
     } catch (e) {
       console.error('Submit quiz error:', e);
     }
@@ -94,9 +122,10 @@ export default function LessonScreen() {
     );
   }
 
+  const displayDuration = actualDuration > 0 ? actualDuration : lesson.duration;
   const isCompleted = userProgress?.isCompleted ?? false;
-  const watchedPercent = lesson.duration > 0
-    ? Math.min(100, Math.round(((userProgress?.watchedSeconds ?? 0) / lesson.duration) * 100))
+  const watchedPercent = displayDuration > 0
+    ? Math.min(100, Math.round(((userProgress?.watchedSeconds ?? 0) / displayDuration) * 100))
     : 0;
 
   return (
@@ -105,9 +134,10 @@ export default function LessonScreen() {
         url={lesson.videoUrl}
         lessonId={lesson._id}
         userId={currentUser._id}
-        duration={lesson.duration}
+        duration={actualDuration > 0 ? actualDuration : lesson.duration}
         onProgress={handleProgress}
         onEnd={handleVideoEnd}
+        onDurationChange={handleDurationChange}
       />
 
       <ScrollView style={styles.content}>
@@ -136,18 +166,16 @@ export default function LessonScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {lesson.quizQuestions && (
-        <QuizModal
-          visible={showQuiz}
-          quiz={{
-            question: lesson.quizQuestions[0]?.question ?? '',
-            options: lesson.quizQuestions[0]?.options ?? [],
-            correctAnswer: lesson.quizQuestions[0]?.correctIndex ?? 0,
-          }}
-          onClose={() => setShowQuiz(false)}
-          onComplete={handleQuizComplete}
-        />
-      )}
+      <QuizModal
+        visible={showQuiz}
+        quiz={{
+          question: lesson.quizQuestions[0]?.question ?? '',
+          options: lesson.quizQuestions[0]?.options ?? [],
+          correctAnswer: lesson.quizQuestions[0]?.correctIndex ?? 0,
+        }}
+        onClose={() => setShowQuiz(false)}
+        onComplete={handleQuizComplete}
+      />
     </View>
   );
 }

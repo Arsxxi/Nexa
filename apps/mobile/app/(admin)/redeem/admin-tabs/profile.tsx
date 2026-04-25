@@ -1,9 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
+import { useState } from 'react';
 
 const TYPOGRAPHY = {
   h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
@@ -28,27 +29,20 @@ export default function AdminProfileScreen() {
   const { signOut } = useAuth();
   const userData = useQuery(api.users.getCurrentUser);
   const stats = useQuery(api.coins.getRedeemStats);
+  const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
 
   const handleTerminate = () => {
-    Alert.alert(
-      'TERMINATE_SESSION',
-      'END ACTIVE OPERATOR CREDENTIALS?',
-      [
-        { text: 'BATAL', style: 'cancel' },
-        {
-          text: 'TERMINATE',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/(auth)/login' as any);
-            } catch (error) {
-              console.error('Sign out error:', error);
-            }
-          },
-        },
-      ]
-    );
+    setLogoutConfirmVisible(true);
+  };
+
+  const confirmSignOut = async () => {
+    setLogoutConfirmVisible(false);
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Sign out error:', error);
+    }
   };
 
   const getInitials = (name: string) => {
@@ -130,6 +124,32 @@ export default function AdminProfileScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      <Modal visible={logoutConfirmVisible} transparent animationType="fade">
+        <View style={styles.logoutModalOverlay} pointerEvents="box-none">
+          <View style={styles.logoutModalContent}>
+            <View style={styles.logoutIconWrap}>
+              <Ionicons name="warning" size={32} color={COLORS.danger} />
+            </View>
+            <Text style={styles.logoutModalTitle}>KELUAR?</Text>
+            <Text style={styles.logoutModalDesc}>AKANMengakhiriSESIOPERATOR</Text>
+            <View style={styles.logoutModalButtons}>
+              <TouchableOpacity
+                style={[styles.logoutModalBtn, { backgroundColor: COLORS.pillDefault }]}
+                onPress={() => setLogoutConfirmVisible(false)}
+              >
+                <Text style={styles.logoutModalBtnText}>BATAL</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.logoutModalBtn, { backgroundColor: COLORS.danger }]}
+                onPress={confirmSignOut}
+              >
+                <Text style={[styles.logoutModalBtnText, { color: '#fff' }]}>KELUAR</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -209,5 +229,49 @@ const styles = StyleSheet.create({
   terminateHint: {
     fontFamily: TYPOGRAPHY.h3.fontFamily,
     fontSize: 10, fontWeight: '400', color: COLORS.muted, textAlign: 'center', marginBottom: 24,
+  },
+  logoutModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutModalContent: {
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 24,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
+  logoutIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FEE2E2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  logoutModalTitle: {
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontSize: 18, fontWeight: '700', color: COLORS.dark, marginBottom: 8,
+  },
+  logoutModalDesc: {
+    fontFamily: TYPOGRAPHY.h3.fontFamily,
+    fontSize: 12, color: COLORS.muted, marginBottom: 24, textAlign: 'center',
+  },
+  logoutModalButtons: {
+    flexDirection: 'row', gap: 12, width: '100%',
+  },
+  logoutModalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  logoutModalBtnText: {
+    fontFamily: TYPOGRAPHY.h3.fontFamily,
+    fontSize: 12, fontWeight: '600', color: COLORS.dark,
   },
 });

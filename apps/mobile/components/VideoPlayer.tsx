@@ -10,6 +10,7 @@ interface VideoPlayerProps {
   duration: number;
   onEnd?: () => void;
   onProgress?: (seconds: number) => void;
+  onDurationChange?: (actualDuration: number) => void;
 }
 
 export function VideoPlayer({
@@ -19,53 +20,111 @@ export function VideoPlayer({
   duration,
   onEnd,
   onProgress,
+  onDurationChange,
 }: VideoPlayerProps) {
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasEnded = useRef(false);
+  const actualDurationRef = useRef(duration);
 
   const player = useVideoPlayer(url, (p) => {
     p.loop = false;
     p.play();
   });
 
-  // Track progress setiap 5 detik
+  // Try to get actual duration from player (for cloud videos)
+  useEffect(() => {
+    const getActualDuration = () => {
+      if (!player) return;
+      
+      // Try to get duration from player (works for cloud/local videos)
+      if (player.duration && player.duration > 0 && player.duration !== actualDurationRef.current) {
+        actualDurationRef.current = player.duration;
+        console.log('[VideoPlayer] Got actual duration from player:', player.duration);
+        if (onDurationChange) {
+          onDurationChange(player.duration);
+        }
+      }
+    };
+
+    // Poll duration for first 3 seconds (video needs time to load)
+    const durationPollInterval = setInterval(getActualDuration, 500);
+    setTimeout(() => clearInterval(durationPollInterval), 3000);
+
+    return () => clearInterval(durationPollInterval);
+  }, [player, onDurationChange]);
+
+  // Track progress every 1 second for accuracy
   useEffect(() => {
     if (!onProgress) return;
 
-    progressInterval.current = setInterval(() => {
-      if (player && player.currentTime > 0) {
-        onProgress(Math.floor(player.currentTime));
+    const trackProgress = () => {
+      if (player && player.currentTime > 0 && !hasEnded.current) {
+        const currentSeconds = Math.floor(player.currentTime);
+        onProgress(currentSeconds);
+
+        // Auto-end if >= 95% of actual duration
+        const progressPercent = (currentSeconds / actualDurationRef.current) * 100;
+        if (progressPercent >= 95 && !hasEnded.current) {
+          hasEnded.current = true;
+          console.log('[VideoPlayer] Video ended (95%+), calling onEnd');
+          onEnd?.();
+        }
       }
-    }, 5000);
+    };
+
+    progressInterval.current = setInterval(trackProgress, 1000);
 
     return () => {
       if (progressInterval.current) clearInterval(progressInterval.current);
     };
-  }, [player, onProgress]);
+  }, [player, onProgress, onEnd]);
 
-  // Deteksi video selesai
+  // Multiple methods for video end detection - more reliable
   useEffect(() => {
     if (!onEnd) return;
 
+    const checkVideoEnd = () => {
+      if (hasEnded.current || !player.currentTime) return;
+      
+      const currentDuration = actualDurationRef.current;
+      const remaining = currentDuration - player.currentTime;
+      const progressPercent = (player.currentTime / currentDuration) * 100;
+      
+      // Video considered done if: remaining < 3 seconds OR progress >= 95%
+      if (remaining < 3 || progressPercent >= 95) {
+        hasEnded.current = true;
+        console.log('[VideoPlayer] Video ended, calling onEnd. progress:', progressPercent.toFixed(1));
+        onProgress?.(Math.floor(player.currentTime));
+        onEnd();
+      }
+    };
+
+    // Method 1: playingChange event
     const subscription = player.addListener('playingChange', (isPlaying) => {
-      // Video selesai kalau berhenti play dan sudah mendekati akhir
+      console.log('[VideoPlayer] playingChange:', isPlaying, 'currentTime:', player.currentTime?.toFixed(1));
       if (!isPlaying && !hasEnded.current && player.currentTime > 0) {
-        const remaining = duration - player.currentTime;
-        if (remaining < 3) {
-          hasEnded.current = true;
-          if (onProgress) onProgress(Math.floor(player.currentTime));
-          onEnd();
-        }
+        checkVideoEnd();
       }
     });
 
-    return () => subscription.remove();
-  }, [player, onEnd, onProgress, duration]);
+    // Method 2: Periodic check every 2 seconds as backup
+    const timeCheckInterval = setInterval(() => {
+      if (!hasEnded.current && player.currentTime > 0) {
+        checkVideoEnd();
+      }
+    }, 2000);
 
-  // Reset state saat url berubah (ganti lesson)
+    return () => {
+      subscription.remove();
+      if (timeCheckInterval) clearInterval(timeCheckInterval);
+    };
+  }, [player, onEnd, onProgress]);
+
+  // Reset state when url changes (new lesson)
   useEffect(() => {
     hasEnded.current = false;
-  }, [url]);
+    actualDurationRef.current = duration;
+  }, [url, duration]);
 
   const togglePlay = useCallback(() => {
     if (player.playing) {

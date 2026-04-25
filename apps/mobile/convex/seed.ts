@@ -82,7 +82,7 @@ const freeCourses = [
     ],
   },
   {
-    title: 'TypeScript Dasar hingga Mahir',
+    title: 'Basic Coding',
     description: 'Kuasai TypeScript untuk menulis kode yang lebih aman dan maintainable.',
     thumbnailUrl: 'https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=400',
     category: 'Teknologi',
