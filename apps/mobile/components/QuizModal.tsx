@@ -1,103 +1,192 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   Dimensions,
   TouchableWithoutFeedback,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
+export interface QuizQuestion {
+  question: string;
+  options: string[];
+  correctIndex: number;
+}
+
+export interface QuizAnswer {
+  questionIndex: number;
+  selectedIndex: number;
+  correctIndex: number;
+  isCorrect: boolean;
+}
+
 interface QuizModalProps {
   visible: boolean;
-  quiz: {
-    question: string;
-    options: string[];
-    correctAnswer: number;
-  };
+  quiz: QuizQuestion[];
   onClose: () => void;
-  onComplete: (correct: boolean) => void;
+  onComplete: (score: number, total: number, answers: QuizAnswer[]) => void;
 }
 
 export function QuizModal({ visible, quiz, onClose, onComplete }: QuizModalProps) {
-  // Fungsi dan State Anda (TIDAK DIUBAH)
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState<(number | null)[]>([]);
+  const [showResult, setShowResult] = useState(false);
+  const [correctCount, setCorrectCount] = useState(0);
 
-  const handleSubmit = () => {
-    if (selectedAnswer === null) {
-      Alert.alert('Error', 'Please select an answer');
-      return;
+  useEffect(() => {
+    if (visible && quiz && quiz.length > 0) {
+      setCurrentIndex(0);
+      setAnswers(new Array(quiz.length).fill(null));
+      setShowResult(false);
+      setCorrectCount(0);
     }
+  }, [visible, quiz]);
 
-    const isCorrect = selectedAnswer === quiz.correctAnswer;
-    onComplete(isCorrect);
-
-    if (isCorrect) {
-      Alert.alert('Correct!', 'Great job! You earned coins.');
-    } else {
-      Alert.alert('Incorrect', `The correct answer was: ${quiz.options[quiz.correctAnswer]}`);
-    }
-
-    setSelectedAnswer(null);
-  };
-
+  const currentQuestion = quiz[currentIndex];
+  const selectedAnswer = answers[currentIndex];
   const letters = ['A', 'B', 'C', 'D', 'E'];
 
+  const handleSelectAnswer = (index: number) => {
+    const newAnswers = [...answers];
+    newAnswers[currentIndex] = index;
+    setAnswers(newAnswers);
+  };
+
+  const handleNext = () => {
+    if (currentIndex < quiz.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+    } else {
+      let correct = 0;
+      answers.forEach((answer, idx) => {
+        if (answer === quiz[idx].correctIndex) {
+          correct++;
+        }
+      });
+      setCorrectCount(correct);
+      setShowResult(true);
+    }
+  };
+
+  const handleFinish = () => {
+    const quizAnswers: QuizAnswer[] = answers.map((selected, idx) => ({
+      questionIndex: idx,
+      selectedIndex: selected ?? -1,
+      correctIndex: quiz[idx].correctIndex,
+      isCorrect: selected === quiz[idx].correctIndex,
+    }));
+    const score = Math.round((correctCount / quiz.length) * 100);
+    onComplete(score, quiz.length, quizAnswers);
+  };
+
+  if (showResult) {
+    const score = Math.round((correctCount / quiz.length) * 100);
+    const isPassing = score >= 70;
+
+    return (
+      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+        <View style={styles.overlay}>
+          <TouchableWithoutFeedback onPress={onClose}>
+            <View style={StyleSheet.absoluteFill} />
+          </TouchableWithoutFeedback>
+
+          <View style={styles.bottomSheet}>
+            <View style={styles.handleContainer}>
+              <View style={styles.handle} />
+            </View>
+
+            <View style={styles.resultContainer}>
+              <View style={[styles.resultCircle, isPassing ? styles.resultPass : styles.resultFail]}>
+                <Text style={styles.resultScore}>{score}%</Text>
+              </View>
+
+              <Text style={styles.resultTitle}>
+                {isPassing ? 'Lulus!' : 'Coba Lagi'}
+              </Text>
+              <Text style={styles.resultSubtitle}>
+                {correctCount} dari {quiz.length} soal benar
+              </Text>
+
+              <View style={styles.resultDetails}>
+                {quiz.map((q, idx) => (
+                  <View key={idx} style={styles.resultItem}>
+                    <View style={[
+                      styles.resultIcon,
+                      answers[idx] === q.correctIndex ? styles.resultIconCorrect : styles.resultIconWrong
+                    ]}>
+                      <Text style={styles.resultIconText}>
+                        {answers[idx] === q.correctIndex ? '✓' : '✗'}
+                      </Text>
+                    </View>
+                    <Text style={styles.resultQuestion} numberOfLines={2}>
+                      {idx + 1}. {q.question}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <TouchableOpacity style={styles.finishButton} onPress={handleFinish}>
+                <Text style={styles.finishButtonText}>
+                  {isPassing ? 'Selesai' : 'Ulangi'}
+                </Text>
+                <Feather name="arrow-right" size={20} color="#18181B" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
   return (
-    <Modal 
-      visible={visible} 
-      animationType="slide" 
-      transparent 
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
-        {/* Menyentuh area background redup akan memanggil onClose (menggantikan tombol Skip) */}
         <TouchableWithoutFeedback onPress={onClose}>
           <View style={StyleSheet.absoluteFill} />
         </TouchableWithoutFeedback>
 
         <View style={styles.bottomSheet}>
-          {/* Handle bar di bagian atas */}
           <View style={styles.handleContainer}>
             <View style={styles.handle} />
           </View>
 
-          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.headerText}>KUIS · SOAL 1 DARI 5</Text>
+            <Text style={styles.headerText}>
+              KUIS · SOAL {currentIndex + 1} DARI {quiz.length}
+            </Text>
             <View style={styles.progressDots}>
-              <View style={[styles.dot, styles.dotActive]} />
-              <View style={styles.dot} />
-              <View style={styles.dot} />
-              <View style={styles.dot} />
-              <View style={styles.dot} />
+              {quiz.map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.dot,
+                    idx === currentIndex && styles.dotActive,
+                    answers[idx] !== null && styles.dotAnswered,
+                  ]}
+                />
+              ))}
             </View>
           </View>
 
-          {/* Pertanyaan */}
-          <Text style={styles.questionText}>{quiz?.question}</Text>
+          <Text style={styles.questionText}>{currentQuestion?.question}</Text>
 
-          {/* Pilihan Jawaban */}
           <View style={styles.optionsContainer}>
-            {quiz?.options.map((option, index) => {
-              const isSelected = selectedAnswer === index;
+            {currentQuestion?.options.map((option, idx) => {
+              const isSelected = selectedAnswer === idx;
               return (
                 <TouchableOpacity
-                  key={index}
+                  key={idx}
                   style={[
                     styles.optionCard,
                     isSelected && styles.optionCardSelected,
                   ]}
-                  onPress={() => setSelectedAnswer(index)}
+                  onPress={() => handleSelectAnswer(idx)}
                   activeOpacity={0.8}
                 >
-                  {/* Garis kuning saat dipilih */}
                   {isSelected && <View style={styles.selectedBorder} />}
-                  
-                  <Text style={styles.optionLetter}>{letters[index]}</Text>
+                  <Text style={styles.optionLetter}>{letters[idx]}</Text>
                   <Text
                     style={[
                       styles.optionText,
@@ -111,16 +200,17 @@ export function QuizModal({ visible, quiz, onClose, onComplete }: QuizModalProps
             })}
           </View>
 
-          {/* Tombol Submit / Jawab */}
           <View style={styles.footer}>
             <TouchableOpacity
               style={[
                 styles.submitButton,
                 selectedAnswer === null && styles.submitButtonDisabled,
               ]}
-              onPress={handleSubmit}
+              onPress={handleNext}
             >
-              <Text style={styles.submitButtonText}>JAWAB</Text>
+              <Text style={styles.submitButtonText}>
+                {currentIndex < quiz.length - 1 ? 'LANJUT' : 'SELESAI'}
+              </Text>
               <Feather name="arrow-right" size={20} color="#18181B" />
             </TouchableOpacity>
           </View>
@@ -134,7 +224,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'flex-end', // Membuatnya menjadi bottom sheet
+    justifyContent: 'flex-end',
   },
   bottomSheet: {
     backgroundColor: '#FAFAFA',
@@ -178,6 +268,9 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     backgroundColor: '#18181B',
+  },
+  dotAnswered: {
+    backgroundColor: '#FFC800',
   },
   questionText: {
     fontSize: 18,
@@ -243,6 +336,87 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   submitButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#18181B',
+  },
+  resultContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  resultCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  resultPass: {
+    backgroundColor: '#D1FAE5',
+  },
+  resultFail: {
+    backgroundColor: '#FEE2E2',
+  },
+  resultScore: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#18181B',
+  },
+  resultTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#18181B',
+    marginBottom: 8,
+  },
+  resultSubtitle: {
+    fontSize: 14,
+    color: '#52525B',
+    marginBottom: 24,
+  },
+  resultDetails: {
+    width: '100%',
+    gap: 12,
+    marginBottom: 24,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  resultIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  resultIconCorrect: {
+    backgroundColor: '#D1FAE5',
+  },
+  resultIconWrong: {
+    backgroundColor: '#FEE2E2',
+  },
+  resultIconText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resultQuestion: {
+    flex: 1,
+    fontSize: 13,
+    color: '#3F3F46',
+  },
+  finishButton: {
+    backgroundColor: '#FFC800',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    width: '100%',
+  },
+  finishButtonText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#18181B',

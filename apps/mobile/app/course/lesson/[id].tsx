@@ -4,7 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { VideoPlayer } from '@/components/VideoPlayer';
-import { QuizModal } from '@/components/QuizModal';
+import { QuizModal, QuizAnswer } from '@/components/QuizModal';
+import { Ionicons } from '@expo/vector-icons';
 
 const TYPOGRAPHY = {
   h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
@@ -19,6 +20,7 @@ export default function LessonScreen() {
   const [actualDuration, setActualDuration] = useState(0);
 
   const lesson = useQuery(api.lessons.getById, { id: id as any });
+  const course = useQuery(api.lessons.getCourseByLesson, { lessonId: id as any });
   const currentUser = useQuery(api.users.getCurrentUser);
 
   const userProgress = useQuery(
@@ -54,7 +56,6 @@ export default function LessonScreen() {
     console.log('[LessonScreen] handleVideoEnd called. quizQuestions:', lesson?.quizQuestions);
     if (!currentUser || !lesson) return;
 
-    // More robust quiz detection
     const hasQuiz = lesson?.quizQuestions && 
                   Array.isArray(lesson.quizQuestions) && 
                   lesson.quizQuestions.length > 0 &&
@@ -80,27 +81,31 @@ export default function LessonScreen() {
     }
   };
 
-  const handleQuizComplete = async (correct: boolean) => {
+  const handleQuizComplete = async (score: number, total: number, answers: QuizAnswer[]) => {
     setShowQuiz(false);
     if (!currentUser || !lesson) return;
 
-    const score = correct ? 100 : 0;
+    const passed = score >= 70;
     try {
-      console.log('[LessonScreen] Submitting quiz with score:', score);
+      console.log('[LessonScreen] Submitting quiz with score:', score, 'answers:', answers.length);
       await submitQuizMutation({
         userId: currentUser._id,
         lessonId: lesson._id,
         score,
+        answers,
       });
       
-      // After quiz, mark lesson as complete
-      console.log('[LessonScreen] Marking lesson as complete after quiz');
-      await completeLessonMutation({
-        userId: currentUser._id,
-        lessonId: lesson._id,
-        watchedSeconds: actualDuration > 0 ? actualDuration : lesson.duration,
-      });
-      console.log('[LessonScreen] Lesson completed after quiz');
+      if (passed) {
+        console.log('[LessonScreen] Quiz passed, marking lesson as complete');
+        await completeLessonMutation({
+          userId: currentUser._id,
+          lessonId: lesson._id,
+          watchedSeconds: actualDuration > 0 ? actualDuration : lesson.duration,
+        });
+        console.log('[LessonScreen] Lesson completed after quiz');
+      } else {
+        console.log('[LessonScreen] Quiz failed, user can retry');
+      }
     } catch (e) {
       console.error('Submit quiz error:', e);
     }
@@ -109,7 +114,7 @@ export default function LessonScreen() {
   if (lesson === undefined || currentUser === undefined) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FFC800" />
+        <ActivityIndicator size="large" color="#FFCC00" />
       </View>
     );
   }
@@ -128,51 +133,108 @@ export default function LessonScreen() {
     ? Math.min(100, Math.round(((userProgress?.watchedSeconds ?? 0) / displayDuration) * 100))
     : 0;
 
+  const hasQuiz = lesson?.quizQuestions && lesson.quizQuestions.length > 0;
+
   return (
     <View style={styles.container}>
-      <VideoPlayer
-        url={lesson.videoUrl}
-        lessonId={lesson._id}
-        userId={currentUser._id}
-        duration={actualDuration > 0 ? actualDuration : lesson.duration}
-        onProgress={handleProgress}
-        onEnd={handleVideoEnd}
-        onDurationChange={handleDurationChange}
-      />
-
-      <ScrollView style={styles.content}>
-        {isCompleted && (
-          <View style={styles.completedBadge}>
-            <Text style={styles.completedText}>✓ Lesson Selesai</Text>
-          </View>
-        )}
-
-        {!isCompleted && watchedPercent > 0 && (
-          <View style={styles.progressInfo}>
-            <Text style={styles.progressText}>
-              Sudah ditonton: {watchedPercent}% 
-              {watchedPercent < 80 ? ' (butuh 80% untuk selesai)' : ' ✓'}
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.title}>{lesson.title}</Text>
-
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Text style={styles.backButtonText}>← Kembali ke Course</Text>
+      {/* HEADER TOP BAR */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerIcon}>
+          <Ionicons name="arrow-back" size={24} color="#FFCC00" />
         </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerSubtitle}>LESSON {(lesson?.order ?? 1)} OF {(course?.totalLessons ?? 1)}</Text>
+          <Text style={styles.headerTitle}>{course?.title?.toUpperCase() ?? 'COURSE'}</Text>
+        </View>
+        <TouchableOpacity style={styles.headerIcon}>
+          <Ionicons name="ellipsis-vertical" size={20} color="#9CA3AF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* VIDEO SECTION */}
+      <View style={styles.videoWrapper}>
+        <VideoPlayer
+          url={lesson.videoUrl}
+          lessonId={lesson._id}
+          userId={currentUser._id}
+          duration={actualDuration > 0 ? actualDuration : lesson.duration}
+          onProgress={handleProgress}
+          onEnd={handleVideoEnd}
+          onDurationChange={handleDurationChange}
+        />
+        {/* Pagination Dots Indicator Mockup */}
+        <View style={styles.dotsContainer}>
+          {Array.from({ length: course?.totalLessons ?? 1 }).map((_, idx) => (
+            <View
+              key={idx}
+              style={[styles.dot, idx === (lesson?.order ?? 1) - 1 && styles.dotActive]}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* CONTENT SECTION */}
+      <ScrollView style={styles.contentArea} contentContainerStyle={styles.contentScroll}>
+        
+        {/* Progress & Badge Indicator */}
+        <View style={styles.statusContainer}>
+          {isCompleted && (
+            <View style={styles.completedBadge}>
+              <Text style={styles.completedText}>✓ Selesai</Text>
+            </View>
+          )}
+          {!isCompleted && watchedPercent > 0 && (
+            <Text style={styles.progressText}>
+              Progress: {watchedPercent}% {watchedPercent < 80 ? '(Minimal 80%)' : '✓'}
+            </Text>
+          )}
+        </View>
+
+        <Text style={styles.courseTag}>COURSE: {course?.category?.toUpperCase() ?? 'COURSE'}</Text>
+        <Text style={styles.lessonHeading}>{lesson.title}</Text>
+        <Text style={styles.lessonDescription}>
+          {lesson.description ?? course?.description ?? ""}
+        </Text>
+
+      
+
+        {/* ATTACHMENTS & DISCUSSIONS CARDS */}
+        <View style={styles.cardsRow}>
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>ATTACHMENTS</Text>
+            <View style={styles.cardRowInner}>
+              <Ionicons name="document-text-outline" size={18} color="#927342" />
+              <Text style={styles.cardTitle}>Video</Text>
+            </View>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.cardLabel}>DISCUSSION</Text>
+            <View style={styles.cardRowInner}>
+              <Ionicons name="chatbubbles-outline" size={18} color="#927342" />
+              <Text style={styles.cardTitle}></Text>
+            </View>
+          </View>
+        </View>
+
+        {/* BOTTOM ACTION BUTTON */}
+        <View style={styles.bottomSection}>
+          <Text style={styles.bottomLabel}>SELESAIKAN LESSON INI</Text>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => hasQuiz ? setShowQuiz(true) : router.back()}
+          >
+            {hasQuiz && <View style={styles.buttonSquareIcon} />}
+            <Text style={styles.actionButtonText}>
+              {hasQuiz ? "MULAI KUIS" : "KEMBALI KE COURSE"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
 
       <QuizModal
         visible={showQuiz}
-        quiz={{
-          question: lesson.quizQuestions[0]?.question ?? '',
-          options: lesson.quizQuestions[0]?.options ?? [],
-          correctAnswer: lesson.quizQuestions[0]?.correctIndex ?? 0,
-        }}
+        quiz={lesson.quizQuestions ?? []}
         onClose={() => setShowQuiz(false)}
         onComplete={handleQuizComplete}
       />
@@ -181,23 +243,185 @@ export default function LessonScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '700', color: '#18181B', marginBottom: 16 },
+  container: {
+    flex: 1,
+    backgroundColor: '#111111', // Background dasar (Header & Video area)
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#111111',
+  },
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16, // Sesuaikan dengan insets jika menggunakan SafeArea
+    paddingBottom: 16,
+    backgroundColor: '#181818',
+  },
+  headerIcon: {
+    padding: 4,
+  },
+  headerTitleContainer: {
+    alignItems: 'center',
+  },
+  headerSubtitle: {
+    color: '#9CA3AF',
+    fontSize: 10,
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  headerTitle: {
+    color: '#FFCC00',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  videoWrapper: {
+    backgroundColor: '#000',
+    paddingBottom: 12,
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 12,
+    gap: 6,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    backgroundColor: '#4B5563',
+    borderRadius: 0, // Dibuat kotak sesuai desain
+  },
+  dotActive: {
+    backgroundColor: '#FFCC00',
+  },
+  contentArea: {
+    flex: 1,
+    backgroundColor: '#F9FAFB',
+  },
+  contentScroll: {
+    padding: 24,
+    paddingBottom: 40,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   completedBadge: {
-    backgroundColor: '#D1FAE5', padding: 12,
-    borderRadius: 8, alignItems: 'center', marginBottom: 12,
+    backgroundColor: '#D1FAE5',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    marginRight: 12,
   },
-  completedText: { color: '#065F46', fontWeight: '700' },
-  progressInfo: {
-    backgroundColor: '#FEF3C7', padding: 10,
-    borderRadius: 8, marginBottom: 12,
+  completedText: {
+    color: '#065F46',
+    fontWeight: '700',
+    fontSize: 12,
   },
-  progressText: { color: '#92400E', fontSize: 13, fontWeight: '600' },
-  backButton: {
-    backgroundColor: '#FFC800', borderRadius: 12,
-    padding: 16, alignItems: 'center', marginTop: 8,
+  progressText: {
+    color: '#92400E',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  backButtonText: { color: '#18181B', fontSize: 15, fontWeight: '700' },
+  courseTag: {
+    color: '#6B7280',
+    fontSize: 11,
+    letterSpacing: 1.5,
+    fontFamily: 'monospace',
+    marginBottom: 12,
+  },
+  lessonHeading: {
+    fontSize: 26,
+    color: '#111827',
+    fontWeight: '500',
+    marginBottom: 16,
+  },
+  lessonDescription: {
+    fontSize: 14,
+    color: '#4B5563',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  nextMaterialBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#D1D5DB',
+    alignSelf: 'flex-start',
+    paddingBottom: 4,
+    marginBottom: 40,
+  },
+  nextMaterialText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+    letterSpacing: 1,
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 40,
+  },
+  card: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    padding: 16,
+    borderRadius: 8,
+  },
+  cardLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    letterSpacing: 1,
+    marginBottom: 8,
+  },
+  cardRowInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cardTitle: {
+    fontSize: 13,
+    color: '#111827',
+    fontWeight: '500',
+    flexShrink: 1,
+  },
+  bottomSection: {
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  bottomLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    letterSpacing: 2,
+    marginBottom: 16,
+    fontFamily: 'monospace',
+  },
+  actionButton: {
+    backgroundColor: '#FFCC00',
+    width: '100%',
+    paddingVertical: 16,
+    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  buttonSquareIcon: {
+    width: 8,
+    height: 8,
+    backgroundColor: '#000',
+    marginRight: 10,
+  },
+  actionButtonText: {
+    color: '#000000',
+    fontSize: 14,
+    fontWeight: 'bold',
+    letterSpacing: 1.5,
+  },
 });

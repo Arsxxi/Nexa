@@ -30,6 +30,15 @@ export const getById = query({
   },
 });
 
+export const getCourseByLesson = query({
+  args: { lessonId: v.id('lessons') },
+  handler: async (ctx, args) => {
+    const lesson = await ctx.db.get(args.lessonId);
+    if (!lesson) return null;
+    return await ctx.db.get(lesson.courseId);
+  },
+});
+
 export const create = mutation({
   args: {
     courseId: v.id('courses'),

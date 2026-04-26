@@ -25,10 +25,10 @@ const COLORS = {
   border: '#E4E4E7',
   pillBg: '#F4F4F5',
   darkCard: '#18181B',
-  premiumBg: '#F3E8FF',
-  premiumText: '#9333EA',
-  freeBg: '#DCFCE7',
-  freeText: '#166534',
+  premiumBg: '#FEF3C7',
+  premiumText: '#B45309',
+  freeBg: '#FFFBEB',
+  freeText: '#78350F',
   errorRed: '#DC2626',
 };
 
@@ -171,7 +171,7 @@ export default function HomeScreen() {
   );
 
   const ListHeader = () => {
-    const featured = coursesData.slice(0, 2);
+    const featured = coursesData.slice(0, 3);
     return (
       <View>
         <ScrollView 
@@ -186,12 +186,20 @@ export default function HomeScreen() {
               activeOpacity={0.7}
               onPress={() => router.push(`/course/${course._id}`)}
             >
-              <View style={styles.featuredBadge}>
-                <Text style={styles.featuredBadgeText}>{course.type.toUpperCase()}</Text>
-              </View>
+              {course.thumbnailUrl && (
+                <Image 
+                  source={{ uri: course.thumbnailUrl }} 
+                  style={styles.featuredBgImage} 
+                  resizeMode="cover"
+                />
+              )}
+              <View style={styles.featuredOverlay} />
               <View style={styles.featuredContent}>
                 <Text style={styles.featuredTitle}>{course.title}</Text>
                 <Text style={styles.featuredSub}>{course.totalLessons} LESSON · ⛃ {course.coinReward} COIN</Text>
+              </View>
+              <View style={styles.featuredBadge}>
+                <Text style={styles.featuredBadgeText}>{course.type.toUpperCase()}</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -245,7 +253,7 @@ export default function HomeScreen() {
               styles.typeBadgeText,
               item.type === 'premium' ? styles.textPremium : styles.textFree
             ]}>
-              {item.type.toUpperCase()} {item.type === 'premium' && `· ⛃ ${item.price}`}
+              {item.type.toUpperCase()} {item.type === 'premium' && `· Rp ${item.price?.toLocaleString('id-ID')}`}
             </Text>
           </View>
           
@@ -541,35 +549,45 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  featuredBgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   featuredBadge: {
     backgroundColor: COLORS.primary,
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   featuredBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
     color: COLORS.text,
     letterSpacing: 1,
   },
   featuredContent: {
     gap: 6,
   },
-  featuredTitle: {
-    fontSize: 20,
+featuredTitle: {
+    fontSize: 22,
     fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: '#FFF',
     letterSpacing: 1,
   },
   featuredSub: {
-    fontSize: 10,
+fontSize: 12,
     fontWeight: '600',
     color: '#A1A1AA',
-    letterSpacing: 1,
   },
   sectionHeader: {
     paddingHorizontal: 24,
@@ -633,14 +651,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listCardTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 4,
   },
   listCardSub: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -649,23 +667,24 @@ const styles = StyleSheet.create({
   listCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+alignItems: 'center',
   },
   typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   badgePremium: {
     backgroundColor: COLORS.premiumBg,
   },
   badgeFree: {
     backgroundColor: COLORS.freeBg,
-  },
-  typeBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
   },
   textPremium: {
     color: COLORS.premiumText,

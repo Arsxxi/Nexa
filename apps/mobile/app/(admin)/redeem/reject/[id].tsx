@@ -1,7 +1,7 @@
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -39,7 +39,7 @@ export default function RejectModal() {
 
   const allRequests = useQuery(api.coins.getAllRedeems, { status: 'all' });
   const request = allRequests?.find((r: any) => r._id === id);
-  const processRedeem = useMutation(api.coins.processRedeem);
+  const processRedeem = useAction(api.coins.processRedeem);
 
   const handleReject = async () => {
     if (!request) return;
@@ -53,8 +53,9 @@ export default function RejectModal() {
         rejectionReason: rejectionReason.trim(),
       });
       router.back();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Reject error:', error);
+      Alert.alert('Error', error.message || 'Gagal menolak request. Silakan coba lagi.');
     }
   };
 

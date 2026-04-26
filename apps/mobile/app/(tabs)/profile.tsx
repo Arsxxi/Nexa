@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Image, Modal, TextInput } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 
 const BADGE_ICONS: Record<string, any> = {
   pemula: require('../../assets/images/pemula.png'),
@@ -20,7 +21,6 @@ const TYPOGRAPHY = {
   h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
 };
 
-// --- TEMA WARNA NEXA ---
 const COLORS = {
   primary: '#FFC800',
   dark: '#18181B',
@@ -33,16 +33,39 @@ const COLORS = {
   danger: '#DC2626',
 };
 
+const getStorageUrl = (storageId?: string): string | undefined => {
+  if (!storageId) return undefined;
+  
+  if (storageId.startsWith('http://') || storageId.startsWith('https://')) {
+    return storageId;
+  }
+  
+  const convexUrl = process.env.EXPO_PUBLIC_CONVEX_URL;
+  
+  if (!convexUrl) {
+    console.warn('Missing EXPO_PUBLIC_CONVEX_URL environment variable');
+    return undefined;
+  }
+  
+  const baseUrl = convexUrl.replace(/\/$/, '');
+  return `${baseUrl}/api/storage/${storageId}`;
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { user } = useUser();
   const { signOut } = useAuth();
   const profileData = useQuery(api.users.getCurrentUserProfile);
   const updateProfile = useMutation(api.users.updateProfile);
+  const generateAvatarUploadUrl = useMutation(api.users.generateAvatarUploadUrl);
 
   // Populate stats from realtime profile data
   const profile = profileData?.user || null;
   const badges = profileData?.badges || [];
+  
+  // Local state untuk immediate UI update
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(null);
+  
   const stats = {
     xp: profile?.xp ?? 0,
     streak: profile?.streak ?? 0,
@@ -55,15 +78,133 @@ export default function ProfileScreen() {
   const [langModalVisible, setLangModalVisible] = useState(false);
   const [helpModalVisible, setHelpModalVisible] = useState(false);
   const [logoutConfirmVisible, setLogoutConfirmVisible] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [nameInput, setNameInput] = useState(profile?.name || '');
-  const [avatarInput, setAvatarInput] = useState(profile?.avatarUrl || '');
+  const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     setNameInput(profile?.name || '');
-    setAvatarInput(profile?.avatarUrl || '');
+    setAvatarError(false);
+    setLocalAvatarUrl(null); // Reset local state saat profile berubah
   }, [profile]);
 
   const handleSignOut = () => setLogoutConfirmVisible(true);
+
+  const pickImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Required', 'Please allow access to your photo library.');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const file = result.assets[0];
+        setIsUploading(true);
+
+        try {
+          console.log('🔄 Starting avatar upload...');
+          console.log('📁 File URI:', file.uri);
+          
+          // Step 1: Get upload URL from Convex
+          console.log('1️⃣ Requesting upload URL from Convex...');
+          const uploadUrl = await generateAvatarUploadUrl();
+          
+          if (!uploadUrl) {
+            throw new Error('generateAvatarUploadUrl returned empty result');
+          }
+          
+          console.log('✅ Got upload URL');
+
+          // Step 2: Fetch file and convert to Blob
+          console.log('2️⃣ Converting file to blob...');
+          const response = await fetch(file.uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          
+          const blob = await response.blob();
+          console.log(`✅ Blob created: ${blob.size} bytes, type: ${blob.type}`);
+
+          // Step 3: Upload blob to the URL Convex provided
+          console.log('3️⃣ Uploading to Convex storage...');
+          console.log('   Upload URL:', uploadUrl);
+          
+          const uploadResponse = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': blob.type || 'image/jpeg',
+            },
+            body: blob,
+          });
+
+          console.log('Upload response status:', uploadResponse.status);
+          
+          if (!uploadResponse.ok) {
+            const errorText = await uploadResponse.text();
+            console.error('Upload failed:', errorText);
+            throw new Error(`Upload failed with status ${uploadResponse.status}: ${errorText}`);
+          }
+
+          const uploadData = await uploadResponse.json();
+          console.log('✅ Upload successful. Response:', uploadData);
+          
+          const storageId = uploadData?.storageId;
+          if (!storageId) {
+            throw new Error('No storageId in response: ' + JSON.stringify(uploadData));
+          }
+
+          // Step 4: Update profile with storage ID
+          if (profile?._id) {
+            console.log('4️⃣ Updating profile with storageId:', storageId);
+            
+            // Immediately show new avatar locally
+            const newAvatarUrl = getStorageUrl(storageId);
+            setLocalAvatarUrl(newAvatarUrl);
+            
+            const result = await updateProfile({ 
+              userId: profile._id, 
+              avatarUrl: storageId 
+            });
+            
+            console.log('✅ updateProfile result:', result);
+            
+            setAvatarError(false);
+            
+            // Wait for Convex query to update
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // Close modal to trigger re-render
+            if (editModalVisible) {
+              setEditModalVisible(false);
+            }
+            
+            Alert.alert('Success', 'Avatar updated successfully! 🎉');
+            console.log('✅ Profile updated and UI refreshed');
+          }
+        } catch (uploadErr) {
+          console.error('❌ Upload error:', uploadErr);
+          const errorMsg = uploadErr instanceof Error ? uploadErr.message : String(uploadErr);
+          Alert.alert(
+            'Upload Failed', 
+            `Error: ${errorMsg}\n\nDebug: Check console logs for more details.`
+          );
+        } finally {
+          setIsUploading(false);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Image picker error:', err);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
 
   const confirmSignOut = async () => {
     setLogoutConfirmVisible(false);
@@ -75,7 +216,6 @@ export default function ProfileScreen() {
     }
   };
 
-  // Fungsi untuk mendapatkan 2 huruf inisial (Contoh: John Doe -> JD)
   const getInitials = () => {
     if (!user) return 'U';
     const first = user.firstName ? user.firstName.charAt(0) : '';
@@ -87,11 +227,15 @@ export default function ProfileScreen() {
   const saveProfile = async () => {
     if (!profile) return;
     try {
-      await updateProfile({ userId: profile._id, name: nameInput, avatarUrl: avatarInput });
+      await updateProfile({ 
+        userId: profile._id, 
+        name: nameInput 
+      });
       setEditModalVisible(false);
+      Alert.alert('Success', 'Profile updated');
     } catch (err) {
       console.error('Update profile failed', err);
-      Alert.alert('Error', 'Gagal memperbarui profil');
+      Alert.alert('Error', 'Failed to update profile');
     }
   };
 
@@ -101,6 +245,9 @@ export default function ProfileScreen() {
   const xpInto = (stats.xp || 0) - (currentLevel - 1) * xpPerLevel;
   const xpNeeded = xpPerLevel;
   const progressPercent = Math.min(100, Math.max(0, (xpInto / xpNeeded) * 100));
+
+  // Use local avatar first, then fallback to profile avatar, then use initials
+  const profileAvatarUrl = localAvatarUrl || (profile?.avatarUrl ? getStorageUrl(profile.avatarUrl) : undefined);
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -114,13 +261,32 @@ export default function ProfileScreen() {
 
       {/* Profile top */}
       <View style={styles.profileTop}>
-        {profile?.avatarUrl ? (
-          <Image source={{ uri: profile.avatarUrl }} style={styles.avatarCircle} />
-        ) : (
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarInitial}>{getInitials()}</Text>
+        <TouchableOpacity onPress={pickImage} disabled={isUploading} style={styles.avatarContainer}>
+          {profileAvatarUrl && !avatarError ? (
+            <Image 
+              source={{ uri: profileAvatarUrl }}
+              style={styles.avatarCircle}
+              onError={(e) => {
+                console.log('❌ Image load error:', e.nativeEvent.error);
+                console.log('   Attempted URL:', profileAvatarUrl);
+                setAvatarError(true);
+              }}
+              onLoadStart={() => console.log('📸 Loading avatar...')}
+              onLoadEnd={() => console.log('✅ Avatar loaded')}
+            />
+          ) : (
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitial}>{getInitials()}</Text>
+            </View>
+          )}
+          <View style={styles.editAvatarBtn}>
+            <Ionicons 
+              name={isUploading ? "hourglass" : "camera"} 
+              size={16} 
+              color={COLORS.dark} 
+            />
           </View>
-        )}
+        </TouchableOpacity>
         <View style={styles.nameBlock}>
           <Text style={styles.displayName}>{(profile?.name || user?.fullName || 'ANDI R.').toUpperCase()}</Text>
           <Text style={styles.handle}>@{(user?.username || 'andirx_99')}</Text>
@@ -137,7 +303,6 @@ export default function ProfileScreen() {
           <View style={styles.levelCard}>
             <View style={styles.levelHeader}>
               <Text style={styles.levelTitle}>LEVEL {profile?.level ?? 1} · EXPLORER</Text>
-              {/* compute progress to next level */}
               <Text style={styles.levelXp}>{Math.max(0, xpInto)} / {xpNeeded} XP</Text>
             </View>
             <View style={styles.progressBarBackground}>
@@ -200,7 +365,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.settingsItem} onPress={() => setLangModalVisible(true)}>
-            <Text style={styles.settingsItemText}>Bahasa</Text>
+            <Text style={styles.settingsItemText}>Bahasa Indonesia</Text>
             <Ionicons name="chevron-forward" size={18} color={COLORS.textSecondary} />
           </TouchableOpacity>
 
@@ -214,25 +379,54 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>KELUAR</Text>
         </TouchableOpacity>
       </View>
-      {/* Modals for settings */}
+
+      {/* Edit Modal */}
       <Modal visible={editModalVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Profil</Text>
-            <TextInput value={nameInput} onChangeText={setNameInput} placeholder="Nama" style={styles.input} />
-            <TextInput value={avatarInput} onChangeText={setAvatarInput} placeholder="Avatar URL" style={styles.input} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 }}>
-              <TouchableOpacity onPress={() => setEditModalVisible(false)} style={styles.modalButton}>
-                <Text>Batal</Text>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.editModalCard}>
+            <Text style={styles.editModalTitle}>Edit Profil</Text>
+            <TouchableOpacity onPress={pickImage} disabled={isUploading} style={styles.avatarUploadBtn}>
+              {profileAvatarUrl && !avatarError ? (
+                <Image 
+                  source={{ uri: profileAvatarUrl }}
+                  style={styles.avatarUploadImg}
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <View style={styles.avatarUploadPlaceholder}>
+                  <Ionicons name="camera" size={32} color={COLORS.textSecondary} />
+                  <Text style={styles.avatarUploadText}>Pilih Foto</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TextInput 
+              value={nameInput} 
+              onChangeText={setNameInput} 
+              placeholder="Nama" 
+              style={styles.input} 
+              editable={!isUploading}
+            />
+            <View style={styles.editModalButtons}>
+              <TouchableOpacity 
+                onPress={() => setEditModalVisible(false)} 
+                style={styles.editModalCancel}
+                disabled={isUploading}
+              >
+                <Text style={styles.editModalCancelText}>Batal</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={saveProfile} style={[styles.modalButton, { backgroundColor: COLORS.primary, marginLeft: 8 }]}>
-                <Text style={{ fontWeight: '800' }}>Simpan</Text>
+              <TouchableOpacity 
+                onPress={saveProfile} 
+                style={[styles.editModalSave, isUploading && { opacity: 0.6 }]}
+                disabled={isUploading}
+              >
+                <Text style={styles.editModalSaveText}>{isUploading ? 'Uploading...' : 'Simpan'}</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
+      {/* Other Modals */}
       <Modal visible={notifModalVisible} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -246,20 +440,21 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal visible={langModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Bahasa</Text>
-            <TouchableOpacity style={{ paddingVertical: 8 }} onPress={() => { Alert.alert('Bahasa', 'Bahasa diubah ke Bahasa Indonesia'); setLangModalVisible(false); }}>
-              <Text>Bahasa Indonesia</Text>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLangModalVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.langModalCard}>
+            <Text style={styles.langModalTitle}>Bahasa</Text>
+            <TouchableOpacity style={styles.langOption} onPress={() => { setLangModalVisible(false); }}>
+              <Text style={styles.langOptionText}>Bahasa Indonesia</Text>
+              <Ionicons name="checkmark" size={20} color={COLORS.primary} />
             </TouchableOpacity>
-            <TouchableOpacity style={{ paddingVertical: 8 }} onPress={() => { Alert.alert('Language', 'Switched to English'); setLangModalVisible(false); }}>
-              <Text>English</Text>
+            <TouchableOpacity style={styles.langOption} onPress={() => { setLangModalVisible(false); }}>
+              <Text style={styles.langOptionText}>English</Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setLangModalVisible(false)} style={[styles.modalButton, { alignSelf: 'flex-end', marginTop: 12 }]}>
-              <Text>Tutup</Text>
+            <TouchableOpacity onPress={() => setLangModalVisible(false)} style={styles.langCloseBtn}>
+              <Text style={styles.langCloseBtnText}>Tutup</Text>
             </TouchableOpacity>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <Modal visible={helpModalVisible} transparent animationType="fade">
@@ -275,31 +470,26 @@ export default function ProfileScreen() {
       </Modal>
 
       <Modal visible={logoutConfirmVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { alignItems: 'center', paddingVertical: 24 }]}>
-            <View style={styles.logoutIconWrap}>
-              <Ionicons name="log-out-outline" size={32} color={COLORS.danger} />
-            </View>
-            <Text style={[styles.modalTitle, { marginTop: 16, textAlign: 'center' }]}>KELUAR?</Text>
-            <Text style={{ color: COLORS.textSecondary, marginTop: 8, textAlign: 'center', fontSize: 14 }}>
-              Apakah Anda yakin ingin keluar dari akun ini?
-            </Text>
-            <View style={{ flexDirection: 'row', gap: 12, marginTop: 24 }}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setLogoutConfirmVisible(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.logoutModalCard}>
+            <Text style={styles.logoutModalTitle}>Keluar?</Text>
+            <Text style={styles.logoutModalDesc}>Apakah Anda yakin ingin keluar?</Text>
+            <View style={styles.logoutModalButtons}>
               <TouchableOpacity
                 onPress={() => setLogoutConfirmVisible(false)}
-                style={[styles.logoutModalBtn, { backgroundColor: COLORS.bgBadge }]}
+                style={styles.logoutModalCancel}
               >
-                <Text style={styles.logoutModalBtnText}>BATAL</Text>
+                <Text style={styles.logoutModalCancelText}>Batal</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={confirmSignOut}
-                style={[styles.logoutModalBtn, { backgroundColor: COLORS.danger }]}
+                style={styles.logoutModalConfirm}
               >
-                <Text style={[styles.logoutModalBtnText, { color: '#fff' }]}>KELUAR</Text>
+                <Text style={styles.logoutModalConfirmText}>Keluar</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       <View style={{ height: 60 }} />
@@ -313,135 +503,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgMain,
   },
 
-  // --- Header ---
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 24,
-  },
-  headerTitle: { fontSize: 24, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.text, letterSpacing: -0.5 },
-  headerSubtitle: { fontSize: 10, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginTop: 2 },
-  settingsBtn: {
-    width: 44,
-    height: 44,
-    backgroundColor: COLORS.bgCard,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // --- Profile Section ---
-  profileSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  avatarBox: {
-    width: 72,
-    height: 72,
-    backgroundColor: COLORS.dark,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  avatarText: { fontSize: 24, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.primary, letterSpacing: 1 },
-  profileDetails: { flex: 1, justifyContent: 'center' },
-  userName: { fontSize: 18, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  userEmail: { fontSize: 12, color: COLORS.textSecondary, fontFamily: TYPOGRAPHY.h3.fontFamily,
-    fontWeight: '400', marginBottom: 8 },
-  memberBadge: {
-    backgroundColor: COLORS.bgBadge,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  memberBadgeText: { fontSize: 9, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1 },
-
-  // --- Section General ---
-  section: {
-    paddingHorizontal: 24,
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700',
-    color: COLORS.textSecondary,
-    letterSpacing: 2,
-    marginBottom: 16,
-  },
-
-  // --- Statistik ---
-  statsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.bgCard,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 12,
-    borderRadius: 12,
-  },
-  statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  statLabel: { fontSize: 9, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1 },
-  statIcon: { fontSize: 14 },
-  statValue: { fontSize: 16, fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700', color: COLORS.text, marginBottom: 4 },
-  statSub: { fontSize: 10, fontFamily: TYPOGRAPHY.h3.fontFamily,
-    fontWeight: '400', color: COLORS.textSecondary },
-
-  // --- Menu Pengaturan ---
-  menuContainer: {
-    backgroundColor: COLORS.bgCard,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  menuItemLast: {
-    borderBottomWidth: 0,
-  },
-  menuText: {
-    fontSize: 14,
-    fontFamily: TYPOGRAPHY.h1.fontFamily,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginLeft: 12,
-  },
-  menuArrow: {
-    marginLeft: 'auto',
-  },
-  /* New styles for updated layout */
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -471,6 +532,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     elevation: 2,
     marginRight: 16,
+  },
+  avatarContainer: {
+    position: 'relative',
+    zIndex: 10,
+  },
+  editAvatarBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: COLORS.bgMain,
+    zIndex: 20,
   },
   avatarInitial: { fontSize: 28, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.dark },
@@ -502,10 +581,6 @@ const styles = StyleSheet.create({
   levelTitle: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: COLORS.textSecondary },
   levelXp: { fontSize: 11, color: COLORS.textSecondary },
-  progressRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  progressDot: { width: 14, height: 14, borderRadius: 4, marginRight: 8 },
-  progressDotFilled: { backgroundColor: '#6B5B00' },
-  progressDotEmpty: { borderWidth: 1, borderColor: COLORS.border, backgroundColor: '#FFF' },
   progressBarBackground: { height: 12, backgroundColor: '#F3F3F4', borderRadius: 8, overflow: 'hidden' },
   progressBarFill: { height: 12, backgroundColor: '#6B5B00' },
 
@@ -527,6 +602,19 @@ const styles = StyleSheet.create({
   weekItem: { alignItems: 'center', flex: 1 },
   weekLetter: { fontSize: 10, color: COLORS.textSecondary, marginBottom: 6 },
   weekDot: { width: 10, height: 10, backgroundColor: '#6B5B00', borderRadius: 2 },
+
+  section: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    letterSpacing: 2,
+    marginBottom: 16,
+  },
 
   badgeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
   badgeBox: {
@@ -572,25 +660,162 @@ const styles = StyleSheet.create({
     fontWeight: '700', color: COLORS.dark },
   input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, marginTop: 12 },
   modalButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: COLORS.bgBadge },
-  logoutIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#FEE2E2',
-    justifyContent: 'center',
+
+  logoutModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
     alignItems: 'center',
   },
-  logoutModalBtn: {
+  logoutModalTitle: {
+    fontSize: 20,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 8,
+  },
+  logoutModalDesc: {
+    fontSize: 14,
+    color: COLORS.textSecondary,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  logoutModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  logoutModalCancel: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 12,
+    backgroundColor: COLORS.bgBadge,
     alignItems: 'center',
   },
-  logoutModalBtnText: {
-    fontSize: 13,
+  logoutModalCancelText: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  logoutModalConfirm: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+  },
+  logoutModalConfirmText: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '600',
+    color: COLORS.dark,
+  },
+  editModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+  },
+  editModalTitle: {
+    fontSize: 20,
     fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
-    letterSpacing: 1,
+    color: COLORS.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  avatarUploadBtn: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    alignSelf: 'center',
+    marginBottom: 20,
+    overflow: 'hidden',
+  },
+  avatarUploadImg: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarUploadPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.bgBadge,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarUploadText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    marginTop: 4,
+  },
+  editModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  editModalCancel: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.bgBadge,
+    alignItems: 'center',
+  },
+  editModalCancelText: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  editModalSave: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+  },
+  editModalSaveText: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '600',
+    color: COLORS.dark,
+  },
+  langModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+  },
+  langModalTitle: {
+    fontSize: 20,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  langOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  langOptionText: {
+    fontSize: 16,
+    color: COLORS.text,
+  },
+  langCloseBtn: {
+    marginTop: 20,
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  langCloseBtnText: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '600',
     color: COLORS.textSecondary,
   },
 });

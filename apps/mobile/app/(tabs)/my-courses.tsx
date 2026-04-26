@@ -38,7 +38,7 @@ export default function MyCoursesScreen() {
         </View>
       </View>
       <View style={styles.coinBadge}>
-        <Text style={styles.coinText}>🪙 {currentUser?.coinBalance || 0}_CR</Text>
+        <Text style={styles.coinText}>🪙 {currentUser?.coinBalance || 0}</Text>
       </View>
     </View>
   );
@@ -206,8 +206,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700', color: '#18181B', letterSpacing: -0.5 },
   headerSubtitle: { fontSize: 10, fontWeight: '600', color: '#71717A', letterSpacing: 1.5, marginTop: 2 },
-  coinBadge: { backgroundColor: '#F3F0E6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  coinText: { fontSize: 12, fontWeight: '800', color: '#18181B' },
+  coinBadge: { backgroundColor: '#FFC800', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  coinText: { fontSize: 12, fontWeight: '700', color: '#18181B' },
 
   // Tabs
   tabContainer: { flexDirection: 'row', paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: '#E4E4E7', marginBottom: 16 },
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
   badgeSertifikatText: { fontSize: 8, fontWeight: '800', color: '#3F3F46' },
   doneTextSmall: { fontSize: 10, color: '#8A6D3B', fontWeight: '800' },
   badgeCoin: { backgroundColor: '#FEF3C7', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeCoinText: { fontSize: 8, fontWeight: '800', color: '#D97706' },
+  badgeCoinText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
 
   // Skeleton Loading
   skeletonContainer: { flex: 1, paddingHorizontal: 24 },

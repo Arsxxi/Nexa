@@ -30,6 +30,7 @@ export default defineSchema({
   lessons: defineTable({
     courseId: v.id('courses'),
     title: v.string(),
+    description: v.optional(v.string()),
     videoUrl: v.string(),
     duration: v.number(),
     order: v.number(),
@@ -103,6 +104,27 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_gateway_order', ['gatewayOrderId']),
 
+  quizAttempts: defineTable({
+    userId: v.id('users'),
+    lessonId: v.id('lessons'),
+    score: v.number(),
+    correctCount: v.number(),
+    totalQuestions: v.number(),
+    passed: v.boolean(),
+    answers: v.array(
+      v.object({
+        questionIndex: v.number(),
+        selectedIndex: v.number(),
+        correctIndex: v.number(),
+        isCorrect: v.boolean(),
+      })
+    ),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_lesson', ['lessonId'])
+    .index('by_user_lesson', ['userId', 'lessonId']),
+
   redeemRequests: defineTable({
     userId: v.id('users'),
     coinAmount: v.number(),
@@ -136,6 +158,19 @@ export default defineSchema({
     disburseStatus: v.optional(v.string()),
     disbursedAt: v.optional(v.number()),
     disburseError: v.optional(v.string()),
+    // AI Investigation fields
+    aiRiskLevel: v.optional(v.union(
+      v.literal('LOW'),
+      v.literal('MEDIUM'),
+      v.literal('HIGH')
+    )),
+    aiReasoning: v.optional(v.string()),
+    aiRecommendation: v.optional(v.union(
+      v.literal('APPROVE'),
+      v.literal('REJECT'),
+      v.literal('HOLD')
+    )),
+    aiAnalyzedAt: v.optional(v.number()),
   })
     .index('by_user', ['userId'])
     .index('by_status', ['status'])

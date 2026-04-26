@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
 
 const TYPOGRAPHY = {
@@ -26,7 +26,7 @@ export default function ApproveModal() {
 
   const allRequests = useQuery(api.coins.getAllRedeems, { status: 'all' });
   const request = allRequests?.find((r: any) => r._id === id);
-  const processRedeem = useMutation(api.coins.processRedeem);
+  const processRedeem = useAction(api.coins.processRedeem);
 
   const handleApprove = async () => {
     if (!request) return;

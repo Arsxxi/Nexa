@@ -199,3 +199,22 @@ export const updateProfile = mutation({
     return await ctx.db.get(args.userId);
   },
 });
+
+export const updateUserAvatar = internalMutation({
+  args: { clerkId: v.string(), avatarUrl: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query('users').withIndex('by_clerk_id', (q: any) => q.eq('clerkId', args.clerkId)).first();
+    if (user) {
+      await ctx.db.patch(user._id, { avatarUrl: args.avatarUrl });
+    }
+  },
+});
+
+export const generateAvatarUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Unauthorized');
+    return await ctx.storage.generateUploadUrl();
+  },
+});
