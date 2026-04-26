@@ -1,6 +1,8 @@
 import { httpRouter } from 'convex/server';
 import { httpAction } from './_generated/server';
 import { internal } from './_generated/api';
+import { api } from './_generated/api';
+import { v } from 'convex/values';
 
 const http = httpRouter();
 
@@ -369,6 +371,28 @@ http.route({
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+  }),
+});
+
+http.route({
+  path: '/upload-avatar',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      const blob = await request.blob();
+      if (!blob || blob.size === 0) {
+        return new Response(JSON.stringify({ error: 'No file provided' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      const storageId = await ctx.storage.store(blob);
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      }
+      await ctx.runMutation(internal.users.updateUserAvatar, { clerkId: identity.subject!, avatarUrl: storageId as string });
+      return new Response(JSON.stringify({ storageId: storageId as string }), { headers: { 'Content-Type': 'application/json' } });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ error: error.message || 'Upload failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
     }
   }),
 });

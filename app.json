@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "27660d5a-6de0-487d-8fba-5f3215ba0eee"
+      }
+    },
+    "android": {
+      "package": "com.arsxxi.nexa"
+    }
+  }
+}

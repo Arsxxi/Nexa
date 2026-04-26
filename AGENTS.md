@@ -1,55 +1,71 @@
-# AGENTS.md - Nexa Mobile App
+# Nexa Mobile App
 
-## Quick Start
+## Run
 
 ```bash
 cd apps/mobile
-npx expo start        # dev server
+npx expo start        # dev
 npx expo start --android
 npx expo start --ios
 npx expo start --web
+npx expo lint         # lint
+npx tsc --noEmit      # typecheck
 ```
 
-## Build Commands
+## EAS Build
 
 ```bash
-npx expo lint                    # lint (from apps/mobile)
-npm run deploy                   # convex dev + deploy (from apps/mobile)
+cd apps/mobile
+eas build -p android --profile development   # dev APK
+eas build -p android --profile preview       # internal
+eas build -p android --profile production    # production
+eas submit -p android --latest              # submit to Play Store
 ```
 
-## Architecture
+## Convex Backend
 
-- **App**: `apps/mobile/app/` - Expo Router file-based routing
-- **Backend**: `apps/mobile/convex/` - Convex serverless functions
+```bash
+cd apps/mobile
+npm run dev        # npx convex dev  (local dev)
+npm run deploy     # npx convex dev && npx convex deploy
+```
+
+## Structure
+
+- **Root**: `package.json` workspaces → `apps/mobile`. Run all commands from `apps/mobile`.
+- **App**: `apps/mobile/app/` — Expo Router file-based routing
+- **Backend**: `apps/mobile/convex/` — Convex functions
 - **Schema**: `apps/mobile/convex/schema.ts`
+- **Components**: `apps/mobile/components/`
+- **Fonts**: `assets/Fonts/` — bundled locally (not CDN)
+- **Env**: `.env.example` at root → copy to `apps/mobile/.env.local`
 
-## Routing Convention
+## Routing
 
-| Prefix | Purpose |
-|--------|---------|
-| `(auth)` | Auth screens (login, register) |
-| `(tabs)` | Main app tabs (home, courses, wallet, profile) |
-| `(admin)` | Admin-only routes |
-| Direct | Course/lesson/payment detail routes |
+| Prefix | Purpose | Files |
+|--------|---------|-------|
+| `(auth)` | Login, register | `login.tsx`, `register.tsx` |
+| `(tabs)` | Home, courses, wallet, profile | Tab bar screens |
+| `(admin)` | Admin-only | `redeem/*`, `approve/*`, `reject/*` |
+| Direct | Detail routes | `[id].tsx`, `(courseId).tsx`, `lesson/[id].tsx` |
+| `admin/` | Legacy redirect | `_layout.tsx` → `/(admin)/redeem` |
 
-## Admin Routing Structure
+## Admin Routes
 
-Admin uses a **Stack → Tabs → Stack** pattern:
-- `(admin)/redeem.tsx` — redirect to `(tabs)`
-- `(admin)/redeem/(tabs).tsx` — Stack layout wrapping tabs
-- `(admin)/redeem/(tabs)/_layout.tsx` — Tabs layout (All / Pending / Profile)
-- `(admin)/redeem/(tabs)/index.tsx` — All tab (with in-page sub-filters: all/pending/approved/rejected)
-- `(admin)/redeem/(tabs)/pending.tsx` — Pending tab (inline approve/reject buttons)
-- `(admin)/redeem/(tabs)/profile.tsx` — Profile tab
-- `(admin)/redeem/[id].tsx` — detail modal (transparentModal, tab bar stays visible)
-- `(admin)/redeem/approve/[id].tsx` — approve modal
-- `(admin)/redeem/reject/[id].tsx` — reject modal
+Stack → Tabs → Stack pattern.
 
-Modal screens use `router.back()` to return to previous tab. After approve/reject, use `router.dismissTo('/(admin)/redeem/(tabs)/pending')` to navigate back to the PENDING tab.
+- `(admin)/redeem.tsx` → redirect to `(admin)/redeem/admin-tabs`
+- `(admin)/redeem/redeem-tabs.tsx` — Stack wrapping tabs
+- `(admin)/redeem/admin-tabs/_layout.tsx` — Tabs (All/Pending/Profile)
+- Modal: `router.back()` for close, `router.dismissTo('/path')` after action
 
-## Typography System
+## Auth & Convex
 
-Use the standardized `TYPOGRAPHY` constant across all pages:
+`app_providers.tsx` is the auth wiring. Clerk + Convex are initialized here with hardcoded values (not env vars). Convex URL is `https://limitless-ermine-877.convex.cloud`.
+
+User role is provided via `UserRoleContext` (`'admin' | 'user'`). Use `useUserRole()` hook.
+
+## Typography
 
 ```tsx
 const TYPOGRAPHY = {
@@ -59,45 +75,110 @@ const TYPOGRAPHY = {
 };
 ```
 
-Apply via: `fontFamily: TYPOGRAPHY.h1.fontFamily` in style objects.
+Use: `fontFamily: TYPOGRAPHY.h1.fontFamily`
 
-## Environment Variables
+## Payment
 
-Copy `.env.example` to `.env.local` before running:
-- `CONVEX_DEPLOYMENT`
-- `EXPO_PUBLIC_CONVEX_URL`
-- `EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- `MIDTRANS_CLIENT_KEY` / `MIDTRANS_SERVER_KEY`
+Payment methods in `app/payment/[courseId].tsx` use Midtrans Snap API with `enabled_payments`:
+- `TRANSFER BANK` → `bank_transfer`
+- `GOPAY` → `gopay`
+- `OVO` → `ovo`
+- `QRIS` → `qris`
+
+Backend mutation `createPaymentOrder` in `convex/payments.ts` accepts optional `paymentMethod` parameter.
+
+Payment logos stored in `assets/images/`:
+- `bank.png`, `gopay-logo.svg`, `ovo-logo.png`, `qris-logo.svg`
+
+## Avatar Upload (Convex Storage)
+
+Upload flow uses mutation-based approach (not HTTP route):
+1. Call `api.users.generateAvatarUploadUrl()` mutation → get upload URL
+2. POST file directly to that URL
+3. Receive `storageId` in response JSON
+4. Call `updateProfile({ avatarUrl: storageId })`
+
+To display storage URLs, use helper:
+```tsx
+const getStorageUrl = (storageId?: string) => {
+  if (!storageId) return undefined;
+  if (storageId.startsWith('http')) return storageId;
+  return `${process.env.EXPO_PUBLIC_CONVEX_SITE_URL}/api/storage/${storageId}`;
+};
+```
+
+Required package: `expo-image-picker` (installed)
+
+## Duration Data
+
+Lesson durations stored in **seconds** in database. Display as **minutes**:
+```tsx
+// Correct: convert seconds to minutes
+{Math.ceil((lesson.duration || 0) / 60)} MIN
+// Wrong: just display the number directly
+{lesson.duration} MIN  // Shows seconds as minutes
+```
+
+## Course Badges
+
+- **FREE**: Background `#FFFBEB`, Text `#78350F` (warm cream/brown)
+- **PREMIUM**: Background `#FEF3C7`, Text `#B45309` (light amber/dark amber)
+- **Badge in featured cards**: Always yellow primary (`#FFC800`)
+- **Coin badge**: Yellow background (`#FFC800`), dark text, pill shape (radius 16)
+
+Premium badge price format: `Rp ${price?.toLocaleString('id-ID')}` (not coin symbol)
 
 ## Stack
 
 - Expo SDK 54, React Native 0.81.5
-- Expo Router (file-based routing)
-- Convex (backend + auth)
-- Clerk (authentication)
-- TailwindCSS v4 + NativeWind
-- React Navigation (bottom tabs)
+- Expo Router, Convex, Clerk, TailwindCSS v4 + NativeWind (tailwind config uses `nativewind/preset`)
+- EAS Build (configured in `apps/mobile/eas.json`)
 
-## Rules
+## Mistral AI Agent (Redeem Investigation)
 
-Before attempting to fix any problem or write code:
+AI agent automatically investigates every redeem request after payment is confirmed.
 
-1. Analyze the code structure first
-2. Understand the overall application architecture
-3. Identify available skills and tools
+### Setup di dashboard.mistral.ai
 
-4. Use `skill_find("*")` to list all available skills
-5. Select the most appropriate skill for the problem
-6. Use `skill_use("<selected_skill>")` to apply the chosen skill
+1. Create agent: `RedeemRiskInvestigator`
+2. Model: `mistral-small-latest`
+3. System prompt (copy dari `convex/aiInvestigation.ts` `SYSTEM_PROMPT`)
+4. No tools needed (data passed via prompt)
 
-7. If needed, combine multiple skills to solve the problem effectively
-8. Apply the selected skill(s) step-by-step
+### Environment Variables
 
-9. Do not proceed with implementation before completing the analysis above
+```
+MISTRAL_API_KEY=p-your-api-key
+MISTRAL_AGENT_ID=your-agent-id
+```
 
-## Common Gotchas
+### Flow
 
-- Route conflicts: Expo Router matches `page.tsx` before `(group)/page.tsx`. Use redirects (`Redirect` from `expo-router`) when parent-level page conflicts with nested routes.
-- Tab bar visibility: Modal screens (`presentation: 'transparentModal'`) inherit the parent Tabs tab bar. Use Stack wrapping to keep tab bar visible.
-- LSP path errors: Use `as any` cast for router.push paths with interpolated variables.
-- Modal navigation back: Use `router.back()` for close/tutup buttons in modals. Use `router.dismissTo('/path')` when completing an action needs to navigate to a specific tab.
+1. User submit redeem → payment → `confirmRedeemPayment` action
+2. Payment confirmed → auto-trigger `investigateRedeemRequest` action
+3. Action collects user data (behavior, coin history, enrollment, previous redeems)
+4. POST to Mistral API → parse response → save to `redeemRequests` table
+5. Admin panel shows AI analysis card with risk level, recommendation, reasoning
+
+### AI Fields in `redeemRequests`
+
+- `aiRiskLevel`: `LOW | MEDIUM | HIGH`
+- `aiReasoning`: string (Bahasa Indonesia)
+- `aiRecommendation`: `APPROVE | REJECT | HOLD`
+- `aiAnalyzedAt`: timestamp
+
+## Path Aliases
+
+Both `babel-plugin-module-resolver` and `tsconfig` paths:
+- `@/*` → `apps/mobile/*`
+- `@convex/*` → `apps/mobile/convex/*`
+
+## Gotchas
+
+- **Route conflicts**: Expo Router matches `page.tsx` before `(group)/page.tsx`. Use `Redirect` for parent conflicts.
+- **Tab bar in modals**: Modal with `presentation: 'transparentModal'` inherits Tabs tab bar. Wrap with Stack to keep visible.
+- **LSP path errors**: Cast `router.push` paths with interpolated vars as `any`.
+- **Featured card images**: Use `absoluteFillObject` + overlay (`rgba(0,0,0,0.75)`) for proper text contrast.
+- **Badge z-index**: Use `zIndex: 20` on avatar edit button and `zIndex: 10` on container.
+- **Hardcoded credentials**: `app_providers.tsx` has hardcoded Clerk publishable key and Convex URL — not env-driven.
+- **Fonts**: Bundled in `assets/Fonts/`, loaded via `require()` in `_layout.tsx`. Do not replace with CDN URLs.

@@ -53,8 +53,8 @@ export default function WalletTabScreen() {
       amount: -redeem.coinAmount,
       type: 'redeem' as const,
       note: `Redeem ${redeem.coinAmount.toLocaleString('id-ID')} coin • ${
-        redeem.status === 'pending_payment'
-          ? 'Menunggu verifikasi admin'
+        redeem.status === 'pending'
+          ? 'Menunggu persetujuan admin'
           : redeem.status === 'rejected'
           ? 'Redeem ditolak'
           : 'Status tidak diketahui'

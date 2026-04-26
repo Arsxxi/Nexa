@@ -7,8 +7,9 @@ export default function WalletLayout() {
       <Stack.Screen
         name="redeem"
         options={{
-          presentation: 'modal',
+          presentation: 'transparentModal', // 
           headerShown: false,
+          animation: 'fade', 
         }}
       />
     </Stack>

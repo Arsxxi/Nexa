@@ -141,32 +141,88 @@ function getMidtransAuth(): string {
   return base64Encode(MIDTRANS_SERVER_KEY + ':');
 }
 
-export const createPaymentOrder = action({
+// Internal queries for use in actions
+export const getUserById = internalQuery({
+  args: { userId: v.id('users') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.userId);
+  },
+});
+
+export const getCourseById = internalQuery({
+  args: { courseId: v.id('courses') },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.courseId);
+  },
+});
+
+export const getEnrollmentByUserAndCourse = internalQuery({
   args: {
     userId: v.id('users'),
     courseId: v.id('courses'),
   },
   handler: async (ctx, args) => {
-    const user = await (ctx as any).db.get(args.userId);
-    if (!user) throw new Error('User not found');
-
-    const course = await (ctx as any).db.get(args.courseId);
-    if (!course) throw new Error('Course not found');
-    if (course.type !== 'premium') throw new Error('Course is not premium');
-
-    const existingEnrollment = await (ctx as any).db
+    return await ctx.db
       .query('enrollments')
-      .withIndex('by_user_course', (q: any) =>
+      .withIndex('by_user_course', (q) =>
         q.eq('userId', args.userId).eq('courseId', args.courseId)
       )
       .first();
+  },
+});
+
+// Internal mutation for inserting payment record
+export const insertPaymentRecord = internalMutation({
+  args: {
+    userId: v.id('users'),
+    courseId: v.id('courses'),
+    amount: v.number(),
+    gatewayOrderId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert('payments', {
+      userId: args.userId,
+      courseId: args.courseId,
+      amount: args.amount,
+      status: 'pending',
+      gatewayOrderId: args.gatewayOrderId,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const createPaymentOrder = action({
+  args: {
+    userId: v.id('users'),
+    courseId: v.id('courses'),
+    paymentMethod: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.runQuery(internal.payments.getUserById, { userId: args.userId });
+    if (!user) throw new Error('User not found');
+
+    const course = await ctx.runQuery(internal.payments.getCourseById, { courseId: args.courseId });
+    if (!course) throw new Error('Course not found');
+    if (course.type !== 'premium') throw new Error('Course is not premium');
+
+    const existingEnrollment = await ctx.runQuery(internal.payments.getEnrollmentByUserAndCourse, {
+      userId: args.userId,
+      courseId: args.courseId,
+    });
 
     if (existingEnrollment) throw new Error('User already enrolled in this course');
 
     const timestamp = Date.now();
-    const orderId = `NEXA-${args.courseId}-${timestamp}`;
+    const orderId = `NX${timestamp}`;
 
-    const midtransBody = {
+    const paymentMethodMap: Record<string, string[]> = {
+      'TRANSFER BANK': ['bank_transfer'],
+      'GOPAY': ['gopay'],
+      'OVO': ['ovo'],
+      'QRIS': ['qris'],
+    };
+
+    const midtransBody: any = {
       transaction_details: {
         order_id: orderId,
         gross_amount: course.price,
@@ -184,6 +240,10 @@ export const createPaymentOrder = action({
         },
       ],
     };
+
+    if (args.paymentMethod && paymentMethodMap[args.paymentMethod]) {
+      midtransBody.enabled_payments = paymentMethodMap[args.paymentMethod];
+    }
 
     const response = await fetch(`${MIDTRANS_BASE_URL}/snap/v1/transactions`, {
       method: 'POST',
@@ -203,13 +263,11 @@ export const createPaymentOrder = action({
     const snapToken = responseData.token;
     const redirectUrl = responseData.redirect_url;
 
-    await (ctx as any).db.insert('payments', {
+    await ctx.runMutation(internal.payments.insertPaymentRecord, {
       userId: args.userId,
       courseId: args.courseId,
       amount: course.price,
-      status: 'pending',
       gatewayOrderId: orderId,
-      createdAt: Date.now(),
     });
 
     return {
