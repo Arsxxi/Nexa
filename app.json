@@ -7,6 +7,9 @@
     },
     "android": {
       "package": "com.arsxxi.nexa"
-    }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
