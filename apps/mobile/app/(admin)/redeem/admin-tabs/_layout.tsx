@@ -41,7 +41,7 @@ export default function AdminTabsLayout() {
         options={{ title: 'Pending', tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={focused ? 'time' : 'time-outline'} /> }}
       />
       <Tabs.Screen
-        name="profile"
+        name="admin-profile"
         options={{ title: 'Profile', tabBarIcon: ({ focused }) => <TabIcon focused={focused} icon={focused ? 'person' : 'person-outline'} /> }}
       />
     </Tabs>

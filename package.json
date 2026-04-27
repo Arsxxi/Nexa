@@ -11,5 +11,9 @@
   "dependencies": {
     "react": "19.1.0",
     "react-dom": "19.1.0"
+  },
+  "overrides": {
+    "@solana-mobile/mobile-wallet-adapter-protocol": "2.2.8",
+    "@solana-mobile/mobile-wallet-adapter-protocol-web3js": "2.2.8"
   }
 }

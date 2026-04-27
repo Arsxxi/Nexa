@@ -1,3 +1,5 @@
+import 'react-native-get-random-values';
+
 import { Slot, useRouter, usePathname } from 'expo-router';
 import { View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -23,44 +25,49 @@ function Loading() {
 }
 
 function AppShell() {
-  const [fontsError, setFontsError] = useState(false);
   const [fontsLoaded, error] = useFonts(FONT_FILES);
   const { isLoaded, isSignedIn } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const hasRedirectedRef = useRef(false);
   const userData = useQuery(api.users.getCurrentUser);
 
   useEffect(() => {
-    if (error) {
-      console.error('Font loading error:', error);
-      setFontsError(true);
-    }
-  }, [error]);
+    if (!isLoaded || userData === undefined || !fontsLoaded) return;
 
-  useEffect(() => {
-    if (!isLoaded) return;
+    // 1. Cek folder group saat ini
+    const inAuthGroup = pathname.startsWith('/(auth)');
+    const inTabsGroup = pathname.startsWith('/(tabs)');
+    const inAdminGroup = pathname.startsWith('/(admin)');
 
+    // 2. Jika BELUM login, paksa ke login (kecuali sudah di sana)
     if (!isSignedIn) {
-      if (!pathname.startsWith('/(auth)')) {
+      if (!inAuthGroup) {
         router.replace('/(auth)/login');
       }
-      hasRedirectedRef.current = false;
-      return;
-    }
-
-    if (isSignedIn && !hasRedirectedRef.current && userData !== undefined) {
-      hasRedirectedRef.current = true;
+    } 
+    // 3. Jika SUDAH login
+    else {
       const role = userData?.role ?? 'user';
-      if (role === 'admin') {
+      
+      // Jika user sudah di halaman login/register tapi sudah punya session, pindahkan
+      if (inAuthGroup) {
+        if (role === 'admin') {
+          router.replace('/(admin)/redeem');
+        } else {
+          router.replace('/(tabs)');
+        }
+      }
+      
+      // Proteksi Role (Admin tidak boleh ke tabs user, dan sebaliknya)
+      if (role === 'admin' && inTabsGroup) {
         router.replace('/(admin)/redeem');
-      } else {
+      } else if (role === 'user' && inAdminGroup) {
         router.replace('/(tabs)');
       }
     }
-  }, [isSignedIn, pathname, isLoaded, userData]);
+  }, [isSignedIn, isLoaded, userData, fontsLoaded, pathname]); // Hapus navigasi manual jika sudah di rute yang benar
 
-  if ((!fontsLoaded && !fontsError) || !isLoaded) {
+  if (!fontsLoaded || !isLoaded || userData === undefined) {
     return <Loading />;
   }
 

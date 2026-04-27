@@ -200,7 +200,7 @@ const EnrolledView = ({ course, lessons, router, onLessonPress }: any) => {
                     </View>
                     <View style={stylesEnrolled.lessonContent}>
                       <Text style={stylesEnrolled.lessonSubtitleActive}>
-                        {String(index + 1).padStart(2, '0')} // LESSON
+                        {`${String(index + 1).padStart(2, '0')} LESSON`}
                       </Text>
                       <Text style={stylesEnrolled.lessonTitleActive}>{lesson.title}</Text>
                       <Text style={stylesEnrolled.lessonDesc} numberOfLines={2}>
@@ -218,7 +218,7 @@ const EnrolledView = ({ course, lessons, router, onLessonPress }: any) => {
                     </View>
                     <View style={stylesEnrolled.lessonContent}>
                       <Text style={isCompleted ? stylesEnrolled.lessonSubtitle : stylesEnrolled.lessonSubtitleLocked}>
-                        {String(index + 1).padStart(2, '0')} // LESSON
+                        {`${String(index + 1).padStart(2, '0')} LESSON`}
                       </Text>
                       <Text style={isCompleted ? stylesEnrolled.lessonTitleCompleted : stylesEnrolled.lessonTitleLocked}>
                         {lesson.title}

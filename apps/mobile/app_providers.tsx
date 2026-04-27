@@ -1,10 +1,8 @@
-import { ReactNode, createContext, useContext } from 'react';
+import { ReactNode, createContext, useContext, useState } from 'react';
 import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { ConvexReactClient } from 'convex/react';
 import { ActivityIndicator, View } from 'react-native';
-import { useQuery } from 'convex/react';
-import { api } from '@convex/_generated/api';
 
 const CONVEX_URL = 'https://limitless-ermine-877.convex.cloud';
 const CLERK_KEY = 'pk_test_Y3J1Y2lhbC1pbnNlY3QtOTcuY2xlcmsuYWNjb3VudHMuZGV2JA';
@@ -34,17 +32,10 @@ function LoadingFallback() {
   );
 }
 
-function RoleProvider({ children }: { children: ReactNode }) {
-  const { isSignedIn } = useAuth();
-  const userData = useQuery(api.users.getCurrentUser);
-  const role = isSignedIn ? (userData?.role ?? 'user') : null;
-  return <UserRoleContext.Provider value={role}>{children}</UserRoleContext.Provider>;
-}
-
 function AuthReady({ children }: { children: ReactNode }) {
   const { isLoaded } = useAuth();
   if (!isLoaded) return <LoadingFallback />;
-  return <RoleProvider>{children}</RoleProvider>;
+  return <>{children}</>;
 }
 
 export function ConvexClerkProvider({ children }: { children: ReactNode }) {
