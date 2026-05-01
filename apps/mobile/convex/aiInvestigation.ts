@@ -13,12 +13,12 @@ DATA YANG AKAN KAMU TERIMA:
 - Pola enrollment (kursus yang diambil, progres, durasi)
 - Riwayat redeem sebelumnya (jumlah, status approve/reject)
 
-TUGAS UTAMU:
+TUGAS UTAMAMU:
 Analisa data tersebut dan berikan keputusan dengan format BERIKUT (WAJIB pakai Bahasa Indonesia):
 
 RISK_LEVEL: [LOW/MEDIUM/HIGH]
 RECOMMENDATION: [APPROVE/REJECT/HOLD]
-REASONING: [penjelasan kenapa你这么 conclude, sertakan spesifik details dari data]
+REASONING: [penjelasan kenapa, conclude, sertakan spesifik details dari data]
 
 INDIKATOR MENCURIGAKAN (HIGH RISK):
 - Menyelesaikan banyak course dalam waktu sangat singkat (< 1 jam per course)
