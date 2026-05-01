@@ -246,6 +246,7 @@ flowchart TD
     Bank -->|Complete| Done[redeemRequests: disbursed]
     
     Reject -->|Notify| User
+```
 
 ## Features
 
