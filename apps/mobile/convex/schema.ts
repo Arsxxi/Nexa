@@ -6,6 +6,8 @@ export default defineSchema({
     clerkId: v.string(),
     name: v.string(),
     email: v.string(),
+    avatarUrl: v.optional(v.string()),
+    level: v.optional(v.number()),
     coinBalance: v.number(),
     xp: v.number(),
     streak: v.number(),
@@ -28,6 +30,7 @@ export default defineSchema({
   lessons: defineTable({
     courseId: v.id('courses'),
     title: v.string(),
+    description: v.optional(v.string()),
     videoUrl: v.string(),
     duration: v.number(),
     order: v.number(),
@@ -101,6 +104,27 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_gateway_order', ['gatewayOrderId']),
 
+  quizAttempts: defineTable({
+    userId: v.id('users'),
+    lessonId: v.id('lessons'),
+    score: v.number(),
+    correctCount: v.number(),
+    totalQuestions: v.number(),
+    passed: v.boolean(),
+    answers: v.array(
+      v.object({
+        questionIndex: v.number(),
+        selectedIndex: v.number(),
+        correctIndex: v.number(),
+        isCorrect: v.boolean(),
+      })
+    ),
+    createdAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_lesson', ['lessonId'])
+    .index('by_user_lesson', ['userId', 'lessonId']),
+
   redeemRequests: defineTable({
     userId: v.id('users'),
     coinAmount: v.number(),
@@ -109,19 +133,46 @@ export default defineSchema({
     accountNumber: v.string(),
     accountHolderName: v.string(),
     bankName: v.string(), // Keep for display
+    // Admin approval/payment flow
     status: v.union(
-      v.literal('pending'),
-      v.literal('approved'),
-      v.literal('rejected')
+      v.literal('pending'),         // Waiting admin approval
+      v.literal('pending_payment'), // Waiting user payment after request
+      v.literal('approved'),        // Admin approved - ready for payment or disburse
+      v.literal('rejected')         // Admin rejected
     ),
+    // Midtrans payment tracking (only after admin approves)
+    midtransOrderId: v.optional(v.string()),
+    midtransSnapToken: v.optional(v.string()),
+    paymentStatus: v.optional(v.union(
+      v.literal('pending'),         // Payment waiting to be completed
+      v.literal('paid'),            // Payment successful
+      v.literal('failed'),          // Payment failed or cancelled
+      v.literal('expired')          // Payment expired
+    )),
     requestedAt: v.number(),
+    approvedAt: v.optional(v.number()),
+    paidAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     rejectionReason: v.optional(v.string()),
     disburseReference: v.optional(v.string()),
     disburseStatus: v.optional(v.string()),
     disbursedAt: v.optional(v.number()),
     disburseError: v.optional(v.string()),
+    // AI Investigation fields
+    aiRiskLevel: v.optional(v.union(
+      v.literal('LOW'),
+      v.literal('MEDIUM'),
+      v.literal('HIGH')
+    )),
+    aiReasoning: v.optional(v.string()),
+    aiRecommendation: v.optional(v.union(
+      v.literal('APPROVE'),
+      v.literal('REJECT'),
+      v.literal('HOLD')
+    )),
+    aiAnalyzedAt: v.optional(v.number()),
   })
     .index('by_user', ['userId'])
-    .index('by_status', ['status']),
+    .index('by_status', ['status'])
+    .index('by_midtrans_order', ['midtransOrderId']),
 });

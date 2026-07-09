@@ -25,6 +25,7 @@ export const createUser = mutation({
       coinBalance: 0,
       xp: 0,
       streak: 0,
+      level: 1,
       role: 'user',
     });
   },
@@ -163,5 +164,57 @@ export const expireOldCoins = internalMutation({
         createdAt: Date.now(),
       });
     }
+  },
+});
+
+export const getCurrentUserProfile = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const user = await ctx.db
+      .query('users')
+      .withIndex('by_clerk_id', (q) => q.eq('clerkId', identity.subject!))
+      .first();
+
+    if (!user) return null;
+
+    // Use internal query to compute earned badges
+    const badges = await ctx.runQuery(internal.gamification.getUserBadges, { userId: user._id });
+
+    return { user, badges };
+  },
+});
+
+export const updateProfile = mutation({
+  args: { userId: v.id('users'), name: v.optional(v.string()), avatarUrl: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const patchData: any = {};
+    if (args.name !== undefined) patchData.name = args.name;
+    if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl;
+
+    await ctx.db.patch(args.userId, patchData);
+
+    return await ctx.db.get(args.userId);
+  },
+});
+
+export const updateUserAvatar = internalMutation({
+  args: { clerkId: v.string(), avatarUrl: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.query('users').withIndex('by_clerk_id', (q: any) => q.eq('clerkId', args.clerkId)).first();
+    if (user) {
+      await ctx.db.patch(user._id, { avatarUrl: args.avatarUrl });
+    }
+  },
+});
+
+export const generateAvatarUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Unauthorized');
+    return await ctx.storage.generateUploadUrl();
   },
 });

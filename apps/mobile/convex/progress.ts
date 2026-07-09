@@ -38,11 +38,42 @@ export const submitQuiz = mutation({
     userId: v.id('users'),
     lessonId: v.id('lessons'),
     score: v.number(),
+    answers: v.array(
+      v.object({
+        questionIndex: v.number(),
+        selectedIndex: v.number(),
+        correctIndex: v.number(),
+        isCorrect: v.boolean(),
+      })
+    ),
   },
-  returns: v.object({ passed: v.boolean(), score: v.number() }),
+  returns: v.object({ passed: v.boolean(), score: v.number(), attemptId: v.optional(v.id('quizAttempts')) }),
   handler: async (ctx, args) => {
     const lesson = await ctx.db.get(args.lessonId);
     if (!lesson) throw new Error('Lesson not found');
+
+    const totalQuestions = args.answers.length;
+    const correctCount = args.answers.filter(a => a.isCorrect).length;
+    const passed = args.score >= 70;
+
+    const attemptId = await ctx.db.insert('quizAttempts', {
+      userId: args.userId,
+      lessonId: args.lessonId,
+      score: args.score,
+      correctCount,
+      totalQuestions,
+      passed,
+      answers: args.answers,
+      createdAt: Date.now(),
+    });
+
+    if (passed) {
+      await ctx.runMutation(api.gamification.addXP, {
+        userId: args.userId,
+        amount: 25,
+        reason: 'quiz_passed',
+      });
+    }
 
     let isCompleted = false;
     const passThreshold = lesson.duration * 0.8;
@@ -56,12 +87,12 @@ export const submitQuiz = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, { quizScore: args.score });
-      if (existing.watchedSeconds >= passThreshold && args.score >= 70) {
+      if (existing.watchedSeconds >= passThreshold && passed) {
         isCompleted = true;
         await ctx.db.patch(existing._id, { isCompleted: true });
       }
     } else {
-      const progressId = await ctx.db.insert('progress', {
+      await ctx.db.insert('progress', {
         userId: args.userId,
         lessonId: args.lessonId,
         watchedSeconds: 0,
@@ -77,7 +108,7 @@ export const submitQuiz = mutation({
       });
     }
 
-    return { passed: isCompleted, score: args.score };
+    return { passed: isCompleted, score: args.score, attemptId };
   },
 });
 
@@ -178,6 +209,21 @@ export const checkAndCompleteCourse = internalMutation({
         reason: 'course_complete',
       });
     }
+  },
+});
+
+export const getLessonProgress = query({
+  args: {
+    userId: v.id('users'),
+    lessonId: v.id('lessons'),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query('progress')
+      .withIndex('by_user_lesson', (q) =>
+        q.eq('userId', args.userId).eq('lessonId', args.lessonId)
+      )
+      .first();
   },
 });
 

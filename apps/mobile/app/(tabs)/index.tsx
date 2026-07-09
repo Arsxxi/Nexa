@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
@@ -24,24 +25,41 @@ const COLORS = {
   border: '#E4E4E7',
   pillBg: '#F4F4F5',
   darkCard: '#18181B',
-  premiumBg: '#F3E8FF',
-  premiumText: '#9333EA',
-  freeBg: '#DCFCE7',
-  freeText: '#166534',
+  premiumBg: '#FEF3C7',
+  premiumText: '#B45309',
+  freeBg: '#FFFBEB',
+  freeText: '#78350F',
   errorRed: '#DC2626',
 };
 
-const CATEGORIES = ['SEMUA', 'TEKNOLOGI', 'DESAIN', 'BISNIS', 'MARKETING'];
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
+
+
+
+const CATEGORIES = [
+  { key: 'SEMUA', label: 'SEMUA', value: undefined },
+  { key: 'TEKNOLOGI', label: 'TEKNOLOGI', value: 'Teknologi' },
+  { key: 'DESAIN', label: 'DESAIN', value: 'Desain' },
+  { key: 'BISNIS', label: 'BISNIS', value: 'Bisnis' },
+  { key: 'MARKETING', label: 'MARKETING', value: 'Marketing' },
+];
 
 export default function HomeScreen() {
   const router = useRouter();
   
-  const [activeCategory, setActiveCategory] = useState('SEMUA');
+  const [activeKey, setActiveKey] = useState('SEMUA');
   const [refreshing, setRefreshing] = useState(false);
 
+  const activeCategory = CATEGORIES.find(c => c.key === activeKey)?.value;
+  const activeType = activeKey === 'FREE' ? 'free' : activeKey === 'PREMIUM' ? 'premium' : undefined;
+
   const courses = useQuery(api.courses.getCourses, { 
-    type: activeCategory === 'SEMUA' ? undefined : activeCategory.toLowerCase() === 'free' ? 'free' : activeCategory.toLowerCase() === 'premium' ? 'premium' : undefined,
-    category: activeCategory === 'SEMUA' ? undefined : activeCategory,
+    type: activeType,
+    category: activeCategory,
   });
   
   const currentUser = useQuery(api.users.getCurrentUser);
@@ -77,7 +95,7 @@ export default function HomeScreen() {
       <View style={styles.mainHeader}>
         <View>
           <Text style={styles.welcomeSub}>SELAMAT DATANG · NEXA</Text>
-          <Text style={styles.welcomeTitle}>Halo, {userName}! 👋</Text>
+          <Text style={styles.welcomeTitle}>Halo, {userName}! </Text>
         </View>
         <View style={styles.coinPillPrimary}>
           <View style={styles.coinIcon} />
@@ -133,22 +151,27 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {renderHeaderBar(true)}
       <View style={styles.centerContent}>
-        <View style={styles.iconBox}>
-          <Text style={{ fontSize: 32 }}>📋</Text>
+        <View style={styles.emptyIconBox}>
+          <View style={styles.gridDots}>
+            {[...Array(9)].map((_, i) => (
+              <View key={i} style={[styles.dot, i === 4 || i === 5 || i === 7 ? { backgroundColor: '#FFC800' } : {}]} />
+            ))}
+          </View>
         </View>
-        <Text style={styles.stateTitle}>BELUM ADA COURSE</Text>
-        <Text style={styles.stateDesc}>
-          Coba cari topik lain atau kembali lagi nanti.
+        <Text style={styles.emptyLabel}>BELUM ADA COURSE</Text>
+        <Text style={styles.emptyDivider}>. . . . . . . .</Text>
+        <Text style={styles.emptyTitle}>
+          {'Mulai jelajahi course\nsekarang'}
         </Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={onRefresh}>
-          <Text style={styles.primaryButtonText}>⚲ CARI_COURSE</Text>
+        <TouchableOpacity style={styles.btnExplore} onPress={onRefresh}>
+          <Text style={styles.btnExploreText}>EXPLORE COURSE →</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 
   const ListHeader = () => {
-    const featured = coursesData.slice(0, 2);
+    const featured = coursesData.slice(0, 3);
     return (
       <View>
         <ScrollView 
@@ -163,12 +186,20 @@ export default function HomeScreen() {
               activeOpacity={0.7}
               onPress={() => router.push(`/course/${course._id}`)}
             >
-              <View style={styles.featuredBadge}>
-                <Text style={styles.featuredBadgeText}>{course.type.toUpperCase()}</Text>
-              </View>
+              {course.thumbnailUrl && (
+                <Image 
+                  source={{ uri: course.thumbnailUrl }} 
+                  style={styles.featuredBgImage} 
+                  resizeMode="cover"
+                />
+              )}
+              <View style={styles.featuredOverlay} />
               <View style={styles.featuredContent}>
                 <Text style={styles.featuredTitle}>{course.title}</Text>
                 <Text style={styles.featuredSub}>{course.totalLessons} LESSON · ⛃ {course.coinReward} COIN</Text>
+              </View>
+              <View style={styles.featuredBadge}>
+                <Text style={styles.featuredBadgeText}>{course.type.toUpperCase()}</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -184,12 +215,12 @@ export default function HomeScreen() {
         >
           {CATEGORIES.map((cat) => (
             <TouchableOpacity 
-              key={cat} 
-              style={[styles.categoryPill, activeCategory === cat && styles.categoryPillActive]}
-              onPress={() => setActiveCategory(cat)}
+              key={cat.key} 
+              style={[styles.categoryPill, activeKey === cat.key && styles.categoryPillActive]}
+              onPress={() => setActiveKey(cat.key)}
             >
-              <Text style={[styles.categoryText, activeCategory === cat && styles.categoryTextActive]}>
-                {cat}
+              <Text style={[styles.categoryText, activeKey === cat.key && styles.categoryTextActive]}>
+                {cat.label}
               </Text>
             </TouchableOpacity>
           ))}
@@ -204,7 +235,11 @@ export default function HomeScreen() {
       activeOpacity={0.7}
       onPress={() => router.push(`/course/${item._id}`)}
     >
-      <View style={styles.listCardImage} />
+      {item.thumbnailUrl ? (
+        <Image source={{ uri: item.thumbnailUrl }} style={styles.listCardImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.listCardImage} />
+      )}
       <View style={styles.listCardContent}>
         <Text style={styles.listCardTitle}>{item.title}</Text>
         <Text style={styles.listCardSub}>{item.totalLessons} LESSON</Text>
@@ -218,7 +253,7 @@ export default function HomeScreen() {
               styles.typeBadgeText,
               item.type === 'premium' ? styles.textPremium : styles.textFree
             ]}>
-              {item.type.toUpperCase()} {item.type === 'premium' && `· ⛃ ${item.price}`}
+              {item.type.toUpperCase()} {item.type === 'premium' && `· Rp ${item.price?.toLocaleString('id-ID')}`}
             </Text>
           </View>
           
@@ -282,6 +317,7 @@ const styles = StyleSheet.create({
   },
   brandText: {
     fontSize: 16,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     letterSpacing: 1,
@@ -306,8 +342,11 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 24,
   },
+  gridDots: { width: 32, height: 32, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignContent: 'center' },
+  dot: { width: 8, height: 8, backgroundColor: '#E4E4E7', borderRadius: 2 },
   welcomeSub: {
     fontSize: 10,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 2,
@@ -315,7 +354,8 @@ const styles = StyleSheet.create({
   },
   welcomeTitle: {
     fontSize: 24,
-    fontWeight: '800',
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
     color: COLORS.text,
   },
   coinPillPrimary: {
@@ -371,6 +411,47 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 32,
   },
+  emptyIconBox: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#F4F4F5',
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  emptyLabel: {
+    fontSize: 12,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    color: '#3F3F46',
+    letterSpacing: 2,
+  },
+  emptyDivider: {
+    fontSize: 14,
+    color: '#A1A1AA',
+    marginVertical: 12,
+    letterSpacing: 4,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: 32,
+  },
+  btnExplore: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderRadius: 8,
+  },
+  btnExploreText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.text,
+    letterSpacing: 1,
+  },
   primaryButton: {
     backgroundColor: COLORS.primary,
     paddingHorizontal: 24,
@@ -403,6 +484,7 @@ const styles = StyleSheet.create({
   },
   errorCodeText: {
     fontSize: 10,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -467,34 +549,45 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     justifyContent: 'space-between',
+    overflow: 'hidden',
+  },
+  featuredBgImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  featuredOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
   featuredBadge: {
     backgroundColor: COLORS.primary,
     alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 6,
   },
   featuredBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
     color: COLORS.text,
     letterSpacing: 1,
   },
   featuredContent: {
     gap: 6,
   },
-  featuredTitle: {
-    fontSize: 20,
+featuredTitle: {
+    fontSize: 22,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: '#FFF',
     letterSpacing: 1,
   },
   featuredSub: {
-    fontSize: 10,
+fontSize: 12,
     fontWeight: '600',
     color: '#A1A1AA',
-    letterSpacing: 1,
   },
   sectionHeader: {
     paddingHorizontal: 24,
@@ -502,6 +595,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 12,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 2,
@@ -522,6 +616,7 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 12,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -556,13 +651,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   listCardTitle: {
-    fontSize: 15,
+    fontSize: 17,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 4,
   },
   listCardSub: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '600',
     color: COLORS.textSecondary,
     letterSpacing: 1,
@@ -571,23 +667,24 @@ const styles = StyleSheet.create({
   listCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+alignItems: 'center',
   },
   typeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  typeBadgeText: {
+    fontSize: 10,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700',
+    letterSpacing: 1,
   },
   badgePremium: {
     backgroundColor: COLORS.premiumBg,
   },
   badgeFree: {
     backgroundColor: COLORS.freeBg,
-  },
-  typeBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
   },
   textPremium: {
     color: COLORS.premiumText,

@@ -1,18 +1,19 @@
 import { View, Text, StyleSheet } from 'react-native';
 
-export function StatusBadge({ status }: { status: 'PENDING' | 'APPROVED' | 'REJECTED' }) {
+export function StatusBadge({ status }: { status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'pending' | 'approved' | 'rejected' }) {
+  const normalized = status.toUpperCase() as 'PENDING' | 'APPROVED' | 'REJECTED';
   const getStyle = () => {
-    switch (status) {
+    switch (normalized) {
       case 'APPROVED': return { bg: '#D1FAE5', text: '#065F46' };
       case 'REJECTED': return { bg: '#FEE2E2', text: '#991B1B' };
-      default: return { bg: '#FEF3C7', text: '#92400E' }; // PENDING
+      default: return { bg: '#FFF9E6', text: '#92400E' };
     }
   };
   const { bg, text } = getStyle();
 
   return (
     <View style={[styles.badge, { backgroundColor: bg }]}>
-      <Text style={[styles.text, { color: text }]}>{status}</Text>
+      <Text style={[styles.text, { color: text }]}>{normalized}</Text>
     </View>
   );
 }

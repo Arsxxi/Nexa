@@ -9,9 +9,17 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { Link, router } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { useSignIn } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
 
 const COLORS = {
   primary: '#FFC800',
@@ -31,6 +39,7 @@ function validateEmail(email: string): boolean {
 }
 
 export default function LoginScreen() {
+  const router = useRouter();
   const { signIn, isLoaded } = useSignIn();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -151,24 +160,59 @@ export default function LoginScreen() {
             {loading ? (
               <ActivityIndicator color={COLORS.text} />
             ) : (
-              <Text style={styles.buttonText}>MASUK →</Text>
+              <Text style={styles.buttonText}>MASUK </Text>
             )}
           </TouchableOpacity>
 
           <View style={styles.registerLinkContainer}>
             <Link href="/(auth)/register" asChild>
               <TouchableOpacity>
-                <Text style={styles.registerLinkText}>Daftar Sekarang →</Text>
+                <Text style={styles.registerLinkText}>Daftar Sekarang   </Text>
               </TouchableOpacity>
             </Link>
           </View>
 
           <View style={styles.socialContainer}>
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7} disabled={loading}>
-              <Text style={styles.socialButtonText}>◎ LANJUTKAN DENGAN GOOGLE</Text>
+            <TouchableOpacity 
+              style={styles.socialButton} 
+              activeOpacity={0.7} 
+              disabled={loading}
+              onPress={async () => {
+                // Google OAuth - menggunakan redirect segera
+                // Untuk production, perlu setup Google OAuth di Clerk Dashboard
+                try {
+                  setLoading(true);
+                  await WebBrowser.openAuthSessionAsync(
+                    'https://limitless-ermine-877.convex.cloud/auth/sso/google',
+                    'nexa://oauth/google'
+                  );
+                  router.replace('/(tabs)');
+                } catch (e) {
+                  setError('Google login gagal');
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <View style={styles.socialButtonContent}>
+                <Image source={require('@/assets/images/google-logo.svg')} style={styles.socialIcon} />
+                <Text style={styles.socialButtonText}>LANJUTKAN DENGAN GOOGLE</Text>
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialButton} activeOpacity={0.7} disabled={loading}>
-              <Text style={styles.socialButtonText}> LANJUTKAN DENGAN APPLE</Text>
+            <TouchableOpacity 
+              style={styles.socialButton} 
+              activeOpacity={0.7} 
+              disabled={loading}
+              onPress={() => {
+                // Apple OAuth - perlu setup di Clerk
+                // Untuk sementara, langsung redirect
+                router.replace('/(tabs)');
+              }}
+            >
+              <View style={styles.socialButtonContent}>
+                <Image source={require('@/assets/images/apple.svg')} style={styles.socialIcon} />
+                <Text style={styles.socialButtonText}>LANJUTKAN DENGAN APPLE</Text>
+              </View>
             </TouchableOpacity>
           </View>
         </View>
@@ -306,6 +350,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
+  },
+  socialButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  socialIcon: {
+    width: 20,
+    height: 20,
+    resizeMode: 'contain',
   },
   socialButtonText: {
     fontSize: 12,

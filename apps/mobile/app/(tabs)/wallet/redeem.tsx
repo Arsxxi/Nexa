@@ -1,9 +1,14 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, Modal } from 'react-native';
-import { PanGestureHandler, State, PanGestureHandlerGestureEvent, PanGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Platform, Alert, ActivityIndicator, Modal, Image, BackHandler } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMutation, useQuery } from 'convex/react';
+import { useQuery, useAction } from 'convex/react';
 import { api } from '@convex/_generated/api';
+
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
 
 const COLORS = {
   primary: '#FFC800',
@@ -13,14 +18,26 @@ const COLORS = {
   textSecondary: '#71717A',
   bgCard: '#FFFFFF',
   bgInput: '#F4F4F5',
+  bgInfo: '#FDF6E3',
+  textInfo: '#52525B',
+  success: '#059669',
+  successBg: '#D1FAE5',
+};
+
+const BANK_LOGOS: Record<string, any> = {
+  bca: require('../../../assets/images/bank-central-asia-(bca)-logo.svg'),
+  mandiri: require('../../../assets/images/bank-mandiri-logo.svg'),
+  bni: require('../../../assets/images/bank-negara-indonesia-(bni)-logo.svg'),
+  bri: require('../../../assets/images/bank-rakyat-indonesia-(bri)-logo.svg'),
+  cimb: require('../../../assets/images/bank-cimb-niaga-logo.svg'),
 };
 
 const BANKS = [
-  { id: 'bca', name: 'BCA - Bank Central Asia', code: 'bca', icon: '🏦' },
-  { id: 'mandiri', name: 'Mandiri', code: 'mandiri', icon: '🏦' },
-  { id: 'bni', name: 'BNI', code: 'bni', icon: '🏦' },
-  { id: 'bri', name: 'BRI', code: 'bri', icon: '🏦' },
-  { id: 'cimb', name: 'CIMB Niaga', code: 'cimb', icon: '🏦' },
+  { id: 'bca', name: 'BCA - Bank Central Asia', code: 'bca', logo: BANK_LOGOS.bca },
+  { id: 'mandiri', name: 'Mandiri - Bank Mandiri', code: 'mandiri', logo: BANK_LOGOS.mandiri },
+  { id: 'bni', name: 'BNI - Bank Negara Indonesia', code: 'bni', logo: BANK_LOGOS.bni },
+  { id: 'bri', name: 'BRI - Bank Rakyat Indonesia', code: 'bri', logo: BANK_LOGOS.bri },
+  { id: 'cimb', name: 'CIMB Niaga', code: 'cimb', logo: BANK_LOGOS.cimb },
 ];
 
 export default function RedeemCoinModal() {
@@ -32,288 +49,347 @@ export default function RedeemCoinModal() {
   const [bankMenuOpen, setBankMenuOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
-  const [modalVisible, setModalVisible] = useState(true);
-  const panRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [submitted, setSubmitted] = useState(false);
+  const [redeemResult, setRedeemResult] = useState<{ redeemId: string; coinAmount: number; rupiahAmount: number } | null>(null);
 
   const balance = useQuery(api.coins.getCoinBalance);
-  const requestRedeemMutation = useMutation(api.coins.requestRedeem);
+  const requestRedeem = useAction(api.coins.requestRedeem);
+
+  const submittedRef = useRef(false);
+  useEffect(() => { submittedRef.current = submitted; }, [submitted]);
+
+  useEffect(() => {
+    if (balance !== undefined) setIsLoading(false);
+  }, [balance]);
+
+  
 
   const parseCoinAmount = (value: string) => {
     const coinNum = parseInt(value.replace(/\D/g, ''), 10);
     return Number.isFinite(coinNum) ? coinNum : 0;
   };
 
-  const formatRupiah = (value: number) => {
-    return `Rp ${value.toLocaleString('id-ID')}`;
-  };
+  const formatRupiah = (value: number) => `Rp ${value.toLocaleString('id-ID')}`;
 
   const validateForm = () => {
     const newErrors: {[key: string]: string} = {};
-
     const amount = parseCoinAmount(coinAmount);
-    if (amount < 5000) {
-      newErrors.coinAmount = 'Minimum redeem 5.000 koin';
-    }
-    if (balance !== undefined && amount > balance) {
-      newErrors.coinAmount = 'Saldo koin tidak cukup';
-    }
     if (!coinAmount.trim()) {
       newErrors.coinAmount = 'Jumlah koin harus diisi';
+    } else if (amount < 5000) {
+      newErrors.coinAmount = 'Minimum redeem adalah 5.000 koin (Rp 50.000)';
+    } else if (balance !== undefined && amount > balance) {
+      newErrors.coinAmount = 'Saldo koin tidak cukup';
     }
-
     if (!accountNumber.trim()) {
       newErrors.accountNumber = 'Nomor rekening harus diisi';
     } else if (!/^\d+$/.test(accountNumber.replace(/\s/g, ''))) {
       newErrors.accountNumber = 'Nomor rekening hanya boleh angka';
     }
-
     if (!accountName.trim()) {
       newErrors.accountName = 'Nama rekening harus diisi';
     } else if (accountName.length < 3) {
       newErrors.accountName = 'Nama rekening minimal 3 karakter';
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const onPanGestureEvent = (event: PanGestureHandlerGestureEvent) => {
-    // Handle pan gesture for dragging down to close
-  };
-
-  const onPanHandlerStateChange = (event: PanGestureHandlerStateChangeEvent) => {
-    if (event.nativeEvent.state === State.END) {
-      const { translationY } = event.nativeEvent;
-      if (translationY > 100) { // If dragged down more than 100px
-        handleClose();
-      }
-    }
-  };
-
-  const handleClose = () => {
-    setModalVisible(false);
-    setTimeout(() => router.back(), 300); // Delay to allow animation
-  };
-
-  const coinAmountNumber = parseCoinAmount(coinAmount);
-  const grossAmount = coinAmountNumber * 10;
-  const adminFee = 2500;
-  const totalTransfer = Math.max(0, grossAmount - adminFee);
-
-  const handleAjukanRedeem = async () => {
-    if (!validateForm()) {
+  const handleClose = useCallback(() => {
+    // Jika sudah sukses submit, langsung tutup
+    if (submittedRef.current) {
+      router.back();
       return;
     }
 
+    // Cek apakah user sudah mengisi salah satu input
+    const isFormDirty = coinAmount.trim() !== '' || accountNumber.trim() !== '' || accountName.trim() !== '';
+
+    if (!isFormDirty) {
+      // Jika masih kosong, langsung tutup tanpa peringatan
+      router.back();
+    } else {
+      // Jika sudah ada isinya, munculkan konfirmasi
+      Alert.alert('Batal?', 'Data yang sudah diisi akan hilang.', [
+        { text: 'Lanjutkan Isi', style: 'cancel' },
+        { 
+          text: 'Batal', 
+          style: 'destructive', 
+          // ✅ KEY FIX: Gunakan setTimeout agar transisi tutup Alert tidak bentrok dengan router.back()
+          onPress: () => setTimeout(() => router.back(), 100) 
+        },
+      ]);
+    }
+  }, [router, coinAmount, accountNumber, accountName]);
+
+  const handleAjukanRedeem = async () => {
+    if (!validateForm()) return;
     setSubmitting(true);
     try {
-      await requestRedeemMutation({
+      const result = await requestRedeem({
         coinAmount: parseCoinAmount(coinAmount),
         bankCode: selectedBank.code,
         accountNumber: accountNumber.trim(),
         accountHolderName: accountName.trim(),
         bankName: selectedBank.name,
       });
-      
-      Alert.alert(
-        'Redeem Diajukan',
-        `Anda mengajukan penukaran ${parseCoinAmount(coinAmount).toLocaleString()} koin ke ${formatRupiah(grossAmount)}. Mohon tunggu proses validasi.`,
-        [{ text: 'OK', onPress: handleClose }]
-      );
+      setRedeemResult(result);
+      setSubmitted(true);
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Gagal mengajukan redeem.');
+      Alert.alert('Error', err.message || 'Gagal mengajukan redeem. Silakan coba lagi.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  const coinAmountNumber = parseCoinAmount(coinAmount);
+  const grossAmount = coinAmountNumber * 10;
+
+  if (isLoading) {
+    return (
+      <View style={[styles.modalBackdrop, styles.loadingScreen]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
   return (
     <Modal
-      visible={modalVisible}
+      visible={true}
       animationType="slide"
-      presentationStyle="pageSheet"
+      transparent={true}
       onRequestClose={handleClose}
     >
-      <PanGestureHandler
-        ref={panRef}
-        onGestureEvent={onPanGestureEvent}
-        onHandlerStateChange={onPanHandlerStateChange}
-      >
-        <View style={styles.modalContainer}>
-          <KeyboardAvoidingView 
-            style={{ flex: 1 }} 
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {/* Handle Bar for dragging */}
+      {/* KEY FIX: pointerEvents="box-none" pada backdrop supaya touch tidak terserap View hitam */}
+      <View style={styles.modalBackdrop} pointerEvents="box-none">
+
+        {submitted && redeemResult ? (
+          /* Success screen — bottomSheet menerima semua touch secara normal */
+          <View style={styles.bottomSheet}>
+            <View style={styles.successContainer}>
               <View style={styles.handleContainer}>
                 <View style={styles.handleBar} />
               </View>
-              
-              {/* Header Section */}
-              <View style={styles.header}>
-                <Text style={styles.headerSub}>FORM REDEEM</Text>
-                <Text style={styles.headerTitle}>REDEEM KOIN</Text>
-                <Text style={styles.balanceInfo}>
-                  Saldo Anda: {balance !== undefined ? `${balance.toLocaleString('id-ID')} koin` : 'Memuat...'}
-                </Text>
+
+              <View style={styles.successIcon}>
+                <Text style={styles.successEmoji}>✅</Text>
               </View>
 
-              {/* Form Fields */}
+              <Text style={styles.successTitle}>Request Terkirim!</Text>
+              <Text style={styles.successDescription}>
+                Request redeem Anda sedang menunggu persetujuan admin.
+                Dana akan ditransfer ke rekening {selectedBank.name} setelah disetujui.
+              </Text>
+
+              <View style={styles.summaryCard}>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>JUMLAH KOIN</Text>
+                  <Text style={styles.summaryValue}>
+                    {redeemResult.coinAmount.toLocaleString('id-ID')} KOIN
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>NOMINAL</Text>
+                  <Text style={styles.summaryValuePrimary}>
+                    {formatRupiah(redeemResult.rupiahAmount)}
+                  </Text>
+                </View>
+                <View style={styles.summaryRow}>
+                  <Text style={styles.summaryLabel}>REKENING</Text>
+                  <Text style={styles.summaryValue}>{selectedBank.name.split(' - ')[0]}</Text>
+                </View>
+              </View>
+
+              <TouchableOpacity style={styles.btnSubmit} onPress={() => router.back()}>
+                <Text style={styles.btnSubmitText}>TUTUP</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.noteText}>
+                Estimated transfer: 1-3 hari kerja setelah approval
+              </Text>
+            </View>
+          </View>
+        ) : (
+          /* Form screen */
+          <View style={styles.bottomSheet}>
+            <View style={styles.handleContainer}>
+              <View style={styles.handleBar} />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="always"
+            >
+              {/* Header dengan zIndex tinggi supaya tidak tertutup dropdown */}
+              <View style={[styles.header, { zIndex: 1001 ,elevation: 10 }]}>
+                <TouchableOpacity
+                  onPress={handleClose}
+                  style={styles.backButton}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.headerBackArrow}>←</Text>
+                </TouchableOpacity>
+                <View style={styles.headerTextContainer}>
+                  <Text style={styles.headerSub}>FORM REDEEM</Text>
+                  <Text style={styles.headerTitle}>REDEEM KOIN</Text>
+                </View>
+              </View>
+
               <View style={styles.formContainer}>
-                {/* Coin Amount Input */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>JUMLAH KOIN</Text>
-                  <TextInput
-                    style={[styles.input, errors.coinAmount && styles.inputError]}
-                    value={coinAmount}
-                    onChangeText={(text) => {
-                      setCoinAmount(text);
-                      if (errors.coinAmount) setErrors({...errors, coinAmount: ''});
-                    }}
-                    placeholder="5000"
-                    keyboardType="numeric"
-                    placeholderTextColor="#A1A1AA"
-                  />
+                  <View style={[styles.inputWrapper, errors.coinAmount && styles.inputError]}>
+                    <TextInput
+                      style={styles.inputText}
+                      value={coinAmount}
+                      onChangeText={(text) => {
+                        setCoinAmount(text);
+                        if (errors.coinAmount) setErrors({...errors, coinAmount: ''});
+                      }}
+                      placeholder="5000"
+                      keyboardType="numeric"
+                      placeholderTextColor="#A1A1AA"
+                    />
+                    <Text style={styles.inputSuffix}>KOIN</Text>
+                  </View>
                   {errors.coinAmount && <Text style={styles.errorText}>{errors.coinAmount}</Text>}
-                  <Text style={styles.helperText}>
-                    Minimum: 5.000 koin • Rate: 1 koin = Rp 100
+                  <Text style={styles.conversionText}>= {formatRupiah(grossAmount)}</Text>
+                </View>
+
+                <View style={styles.infoBox}>
+                  <Text style={styles.infoIcon}>ℹ️</Text>
+                  <Text style={styles.infoText}>
+                    MINIMUM REDEEM ADALAH 5.000 KOIN (RP 50.000). PENCAIRAN AKAN DIPROSES SETELAH ADMIN MENYETUJUI.
                   </Text>
                 </View>
 
-                {/* Bank Selection */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>BANK TUJUAN</Text>
+                {/* Dropdown bank — zIndex hanya aktif saat terbuka */}
+                <View style={[styles.bankInputGroup, bankMenuOpen ? { zIndex: 1000, elevation: 1000 } : { zIndex: 1, elevation: 1 }]}>
+                  <Text style={styles.inputLabel}>PILIH BANK</Text>
                   <TouchableOpacity
                     style={styles.dropdown}
                     onPress={() => setBankMenuOpen(!bankMenuOpen)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.dropdownText}>{selectedBank.name}</Text>
+                    <View style={styles.bankSelectRow}>
+                      {selectedBank.logo ? (
+                        <Image source={selectedBank.logo} style={styles.bankLogo} />
+                      ) : (
+                        <Text style={styles.bankIconPlaceholder}>🏛️</Text>
+                      )}
+                      <Text style={styles.dropdownText}>{selectedBank.name}</Text>
+                    </View>
                     <Text style={styles.dropdownArrow}>{bankMenuOpen ? '▲' : '▼'}</Text>
                   </TouchableOpacity>
-                  
+
                   {bankMenuOpen && (
                     <View style={styles.dropdownMenu}>
-                      {BANKS.map((bank) => (
-                        <TouchableOpacity
-                          key={bank.id}
-                          style={styles.dropdownItem}
-                          onPress={() => {
-                            setSelectedBank(bank);
-                            setBankMenuOpen(false);
-                          }}
-                        >
-                          <Text style={styles.dropdownItemText}>{bank.icon} {bank.name}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
+                        {BANKS.map((bank) => (
+                          <TouchableOpacity
+                            key={bank.id}
+                            style={styles.dropdownItem}
+                            onPress={() => {
+                              setSelectedBank(bank);
+                              setBankMenuOpen(false);
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            {bank.logo && <Image source={bank.logo} style={styles.bankLogoSmall} />}
+                            <Text style={styles.dropdownItemText}>{bank.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
                     </View>
                   )}
                 </View>
 
-                {/* Account Number Input */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>NOMOR REKENING</Text>
-                  <TextInput
-                    style={[styles.input, errors.accountNumber && styles.inputError]}
-                    value={accountNumber}
-                    onChangeText={(text) => {
-                      setAccountNumber(text);
-                      if (errors.accountNumber) setErrors({...errors, accountNumber: ''});
-                    }}
-                    placeholder="1234567890"
-                    keyboardType="numeric"
-                    placeholderTextColor="#A1A1AA"
-                  />
-                  {errors.accountNumber && <Text style={styles.errorText}>{errors.accountNumber}</Text>}
-                </View>
-
-                {/* Account Holder Name Input */}
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>NAMA PEMILIK REKENING</Text>
-                  <TextInput
-                    style={[styles.input, errors.accountName && styles.inputError]}
-                    value={accountName}
-                    onChangeText={(text) => {
-                      setAccountName(text);
-                      if (errors.accountName) setErrors({...errors, accountName: ''});
-                    }}
-                    placeholder="Nama Lengkap"
-                    placeholderTextColor="#A1A1AA"
-                    autoCapitalize="words"
-                  />
-                  {errors.accountName && <Text style={styles.errorText}>{errors.accountName}</Text>}
-                </View>
-
-                {/* Summary Box */}
-                {coinAmountNumber >= 5000 && (
-                  <View style={styles.summaryBox}>
-                    <Text style={styles.summaryTitle}>RINGKASAN</Text>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Jumlah Koin:</Text>
-                      <Text style={styles.summaryValue}>{coinAmountNumber.toLocaleString()} koin</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Nilai Tukar:</Text>
-                      <Text style={styles.summaryValue}>{formatRupiah(grossAmount)}</Text>
-                    </View>
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabel}>Biaya Admin:</Text>
-                      <Text style={styles.summaryValue}>-{formatRupiah(adminFee)}</Text>
-                    </View>
-                    <View style={styles.summaryDivider} />
-                    <View style={styles.summaryRow}>
-                      <Text style={styles.summaryLabelTotal}>Total Transfer:</Text>
-                      <Text style={styles.summaryValueTotal}>{formatRupiah(totalTransfer)}</Text>
-                    </View>
+                <View style={{ zIndex: 1, elevation: 1 }}>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>NOMOR REKENING</Text>
+                    <TextInput
+                      style={[styles.inputSingle, errors.accountNumber && styles.inputError]}
+                      value={accountNumber}
+                      onChangeText={(text) => {
+                        setAccountNumber(text);
+                        if (errors.accountNumber) setErrors({...errors, accountNumber: ''});
+                      }}
+                      placeholder="8726351928"
+                      keyboardType="numeric"
+                      placeholderTextColor="#A1A1AA"
+                    />
+                    {errors.accountNumber && <Text style={styles.errorText}>{errors.accountNumber}</Text>}
                   </View>
-                )}
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>NAMA REKENING</Text>
+                    <TextInput
+                      style={[styles.inputSingle, errors.accountName && styles.inputError]}
+                      value={accountName}
+                      onChangeText={(text) => {
+                        setAccountName(text);
+                        if (errors.accountName) setErrors({...errors, accountName: ''});
+                      }}
+                      placeholder="Nama Lengkap"
+                      placeholderTextColor="#A1A1AA"
+                      autoCapitalize="words"
+                    />
+                    {errors.accountName && <Text style={styles.errorText}>{errors.accountName}</Text>}
+                  </View>
+                </View>
               </View>
 
-              {/* Action Buttons */}
-              <View style={styles.buttonContainer}>
-                <TouchableOpacity 
-                  style={styles.btnCancel} 
-                  onPress={handleClose}
-                  disabled={submitting}
-                >
-                  <Text style={styles.btnCancelText}>BATAL</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.btnSubmit, submitting && styles.btnDisabled]} 
-                  onPress={handleAjukanRedeem}
-                  disabled={submitting}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.btnSubmitText}>AJUKAN REDEEM</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.btnSubmit, submitting && styles.btnDisabled]}
+                onPress={handleAjukanRedeem}
+                disabled={submitting}
+                activeOpacity={0.7}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="#000000" size="small" />
+                ) : (
+                  <Text style={styles.btnSubmitText}>AJUKAN REDEEM →</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={{ height: 40 }} />
             </ScrollView>
-          </KeyboardAvoidingView>
-        </View>
-      </PanGestureHandler>
+          </View>
+        )}
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  modalContainer: {
+  modalBackdrop: {
     flex: 1,
-    paddingTop: 190,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+    // TIDAK ada pointerEvents di sini — diset langsung di JSX sebagai prop
   },
-  scrollContent: {
-    backgroundColor: COLORS.bgCard,
+  loadingScreen: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bottomSheet: {
+    backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    padding: 24,
-    flexGrow: 1,
-    paddingTop: 12,
-    maxHeight: '90%',
+    maxHeight: '92%',
+    paddingHorizontal: 24,
+    overflow: 'visible',
+  },
+  successContainer: {
+    paddingTop: 20,
+    paddingBottom: 40,
+    alignItems: 'center',
+    paddingHorizontal: 0,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   handleContainer: {
     alignItems: 'center',
@@ -325,205 +401,214 @@ const styles = StyleSheet.create({
     backgroundColor: '#E4E4E7',
     borderRadius: 2,
   },
-  
-  // Header
-  header: { marginBottom: 32 },
-  headerSub: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: COLORS.text, letterSpacing: -1 },
-  balanceInfo: { fontSize: 14, color: COLORS.textSecondary, marginTop: 8 },
-
-  // Form
-  formContainer: { marginBottom: 3 },
-  inputGroup: { marginBottom: 20 },
-  inputLabel: { fontSize: 10, fontWeight: '700', color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 8 },
-  input: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
+  header: {
+    marginBottom: 24,
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 12,
     padding: 12,
-    fontSize: 16,
+    minWidth: 44,
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerBackArrow: { fontSize: 24, color: COLORS.text },
+  headerTextContainer: { flex: 1 },
+  headerSub: { fontSize: 10, fontFamily: TYPOGRAPHY.h2.fontFamily, color: COLORS.textSecondary, letterSpacing: 1.5, marginBottom: 4 },
+  headerTitle: { fontSize: 24, fontFamily: TYPOGRAPHY.h1.fontFamily, color: COLORS.text, letterSpacing: -0.5 },
+  formContainer: { marginBottom: 12 },
+  inputGroup: { marginBottom: 20 },
+  bankInputGroup: { marginBottom: 20 },
+  inputLabel: { fontSize: 11, fontFamily: TYPOGRAPHY.h2.fontFamily, color: COLORS.textSecondary, letterSpacing: 1, marginBottom: 8 },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: COLORS.bgInput,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+  },
+  inputText: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: COLORS.text,
+  },
+  inputSuffix: {
+    fontSize: 14,
+    fontFamily: TYPOGRAPHY.h2.fontFamily,
+    color: '#A1A1AA',
+    marginLeft: 8,
+  },
+  inputSingle: {
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
+    fontSize: 16,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     color: COLORS.text,
   },
   inputError: {
+    borderWidth: 1,
     borderColor: '#DC2626',
   },
   errorText: {
     color: '#DC2626',
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 6,
   },
-  helperText: {
-    fontSize: 12,
-    color: COLORS.textSecondary,
-    marginTop: 4,
+  conversionText: {
+    marginTop: 8,
+    fontSize: 16,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: '#854D0E',
   },
-
-  // Dropdown
+  infoBox: {
+    backgroundColor: COLORS.bgInfo,
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+    alignItems: 'flex-start',
+  },
+  infoIcon: { fontSize: 14, marginRight: 10, color: COLORS.textInfo },
+  infoText: {
+    flex: 1,
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.h2.fontFamily,
+    color: COLORS.textInfo,
+    lineHeight: 18,
+    letterSpacing: 0.5,
+  },
   dropdown: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 8,
-    padding: 12,
     backgroundColor: COLORS.bgInput,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  bankSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bankIconPlaceholder: { fontSize: 16, marginRight: 10 },
+  bankLogo: { width: 24, height: 24, marginRight: 10, resizeMode: 'contain' },
+  bankLogoSmall: { width: 20, height: 20, marginRight: 8, resizeMode: 'contain' },
   dropdownText: {
     fontSize: 16,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     color: COLORS.text,
   },
-  dropdownArrow: {
-    fontSize: 14,
-    color: COLORS.textSecondary,
-  },
+  dropdownArrow: { fontSize: 12, color: COLORS.textSecondary },
   dropdownMenu: {
+    backgroundColor: COLORS.bgCard,
+    borderRadius: 12,
+    position: 'absolute',
+    top: 85,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
-    backgroundColor: COLORS.bgCard,
-    marginTop: 4,
-    maxHeight: 200,
   },
   dropdownItem: {
-    padding: 12,
+    padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: '#E4E4E7',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   dropdownItemText: {
-    fontSize: 16,
+    fontSize: 15,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
     color: COLORS.text,
   },
-
-  // Summary
-  summaryBox: {
-    backgroundColor: '#F8F9FA',
+  btnSubmit: {
+    backgroundColor: COLORS.primary,
     borderRadius: 12,
-    padding: 16,
+    height: 56,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginTop: 10,
   },
-  summaryTitle: {
-    fontSize: 12,
-    fontWeight: '700',
+  btnDisabled: { opacity: 0.6 },
+  btnSubmitText: {
+    fontSize: 15,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: '#000000',
+  },
+  successIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: COLORS.successBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  successEmoji: { fontSize: 36 },
+  successTitle: {
+    fontSize: 22,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: COLORS.dark,
+    fontWeight: '800',
+    marginBottom: 10,
+  },
+  successDescription: {
+    fontSize: 14,
     color: COLORS.textSecondary,
-    letterSpacing: 1,
-    marginBottom: 12,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+    paddingHorizontal: 16,
+  },
+  summaryCard: {
+    backgroundColor: COLORS.bgInput,
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    marginBottom: 24,
   },
   summaryRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
   },
   summaryLabel: {
-    fontSize: 14,
+    fontSize: 11,
+    fontFamily: TYPOGRAPHY.h2.fontFamily,
     color: COLORS.textSecondary,
+    letterSpacing: 1,
   },
   summaryValue: {
     fontSize: 14,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  summaryLabelTotal: {
-    fontSize: 16,
-    color: COLORS.text,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: COLORS.dark,
     fontWeight: '600',
   },
-  summaryValueTotal: {
-    fontSize: 16,
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
-  summaryDivider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginVertical: 8,
-  },
-
-  // Buttons
-  buttonContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 20,
-  },
-  btnCancel: {
-    flex: 1,
-    backgroundColor: COLORS.bgInput,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  btnCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.textSecondary,
-  },
-  btnSubmit: {
-    flex: 2,
-    backgroundColor: COLORS.primary,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-  },
-  btnDisabled: {
-    opacity: 0.6,
-  },
-  btnSubmitText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  infoBox: {
-    backgroundColor: '#FEF3C7',
-    flexDirection: 'row',
-    padding: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#FDE047',
-    marginBottom: 24,
-  },
-  infoIcon: { fontSize: 16, marginRight: 12, marginTop: 2 },
-  infoText: { flex: 1, fontSize: 10, color: '#92400E', fontWeight: '600', lineHeight: 16, letterSpacing: 0.5 },
-
-  // Dropdown & Input General
-  bankDropdown: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: COLORS.bgInput,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    height: 56,
-  },
-  bankInfo: { flexDirection: 'row', alignItems: 'center' },
-  bankIcon: { marginRight: 12 },
-  bankName: { fontSize: 14, fontWeight: '600', color: COLORS.text },
-  bankOptions: { marginTop: 12, backgroundColor: COLORS.bgInput, borderRadius: 8, overflow: 'hidden' },
-  bankOption: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#E4E4E7' },
-  bankOptionSelected: { backgroundColor: '#F8F3D9' },
-  bankOptionText: { fontSize: 14, color: COLORS.text },
-
-  inputGeneral: {
-    backgroundColor: COLORS.bgInput,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    height: 56,
+  summaryValuePrimary: {
     fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.text,
+    fontFamily: TYPOGRAPHY.h1.fontFamily,
+    color: COLORS.primary,
+    fontWeight: '800',
   },
-
-  // Tombol Utama
-  btnAjukan: {
-    backgroundColor: COLORS.primary,
-    height: 56,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: Platform.OS === 'ios' ? 20 : 0,
+  noteText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    fontStyle: 'italic',
   },
-  btnAjukanDisabled: {
-    opacity: 0.6,
-  },
-  btnAjukanText: { fontSize: 14, fontWeight: '800', color: COLORS.text, letterSpacing: 1 },
 });

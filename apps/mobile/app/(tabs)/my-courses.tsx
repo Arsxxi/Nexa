@@ -1,8 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from 'convex/react';
 import { api } from '@convex/_generated/api';
+
+const TYPOGRAPHY = {
+  h1: { fontFamily: 'SpaceGrotesk-Bold', fontWeight: '700' as const },
+  h2: { fontFamily: 'nimbus-mono.regular', fontWeight: '400' as const },
+  h3: { fontFamily: 'LiberationSans-Regular', fontWeight: '400' as const },
+};
 
 export default function MyCoursesScreen() {
   const router = useRouter();
@@ -16,7 +22,6 @@ export default function MyCoursesScreen() {
   
   const learningCourses = courses.filter((c: any) => !c.completedAt);
   const completedCourses = courses.filter((c: any) => c.completedAt);
-
   const displayCourses = activeTab === 'LEARNING' ? learningCourses : completedCourses;
 
   // --- COMPONENTS ---
@@ -33,18 +38,26 @@ export default function MyCoursesScreen() {
         </View>
       </View>
       <View style={styles.coinBadge}>
-        <Text style={styles.coinText}>🪙 {currentUser?.coinBalance || 0}_CR</Text>
+        <Text style={styles.coinText}>🪙 {currentUser?.coinBalance || 0}</Text>
       </View>
     </View>
   );
 
   const Tabs = () => (
     <View style={styles.tabContainer}>
-      <TouchableOpacity onPress={() => setActiveTab('LEARNING')} style={styles.tabBtn}>
+      <TouchableOpacity 
+        onPress={() => setActiveTab('LEARNING')} 
+        style={styles.tabBtn}
+        activeOpacity={0.7}
+      >
         <Text style={[styles.tabText, activeTab === 'LEARNING' && styles.tabTextActive]}>SEDANG BELAJAR</Text>
         {activeTab === 'LEARNING' && <View style={styles.activeIndicator} />}
       </TouchableOpacity>
-      <TouchableOpacity onPress={() => setActiveTab('COMPLETED')} style={styles.tabBtn}>
+      <TouchableOpacity 
+        onPress={() => setActiveTab('COMPLETED')} 
+        style={styles.tabBtn}
+        activeOpacity={0.7}
+      >
         <Text style={[styles.tabText, activeTab === 'COMPLETED' && styles.tabTextActive]}>SELESAI</Text>
         {activeTab === 'COMPLETED' && <View style={styles.activeIndicator} />}
       </TouchableOpacity>
@@ -67,30 +80,40 @@ export default function MyCoursesScreen() {
     </View>
   );
 
-  const RenderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIconBox}>
-        <View style={styles.gridDots}>
-          {[...Array(9)].map((_, i) => (
-            <View key={i} style={[styles.dot, i === 4 || i === 5 || i === 7 ? { backgroundColor: '#FFC800' } : {}]} />
-          ))}
+  const RenderEmpty = () => {
+    const isCompletedTab = activeTab === 'COMPLETED';
+    return (
+      <View style={styles.emptyContainer}>
+        <View style={styles.emptyIconBox}>
+          <View style={styles.gridDots}>
+            {[...Array(9)].map((_, i) => (
+              <View key={i} style={[styles.dot, i === 4 || i === 5 || i === 7 ? { backgroundColor: '#FFC800' } : {}]} />
+            ))}
+          </View>
         </View>
+        <Text style={styles.emptyLabel}>BELUM ADA COURSE</Text>
+        <Text style={styles.emptyDivider}>. . . . . . . .</Text>
+        
+        
+        {!isCompletedTab && (
+          <TouchableOpacity style={styles.btnExplore} onPress={() => router.push('/')}>
+            <Text style={styles.btnExploreText}>EXPLORE COURSE →</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <Text style={styles.emptyLabel}>BELUM ADA COURSE</Text>
-      <Text style={styles.emptyDivider}>. . . . . . . .</Text>
-      <Text style={styles.emptyTitle}>Mulai jelajahi course{'\n'}sekarang</Text>
-      <TouchableOpacity style={styles.btnExplore} onPress={() => router.push('/')}>
-        <Text style={styles.btnExploreText}>EXPLORE COURSE →</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   const RenderLearningCard = ({ item }: { item: any }) => {
     const progressPercent = item.totalLessons > 0 ? Math.round((item.completedLessons || 0) / item.totalLessons * 100) : 0;
     const segments = Array.from({ length: item.totalLessons || 1 });
     return (
-      <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)}>
-        <View style={styles.cardImage} />
+      <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)} activeOpacity={0.7}>
+        {item.thumbnailUrl ? (
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.cardImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.cardImage} />
+        )}
         <View style={styles.cardContent}>
           <View style={styles.tagBox}><Text style={styles.tagText}>{item.category?.toUpperCase()}</Text></View>
           <Text style={styles.courseTitle} numberOfLines={1}>{item.title}</Text>
@@ -121,8 +144,12 @@ export default function MyCoursesScreen() {
   };
 
   const RenderCompletedCard = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)}>
-      <View style={styles.cardImage} />
+    <TouchableOpacity style={styles.card} onPress={() => router.push(`/course/${item._id}`)} activeOpacity={0.7}>
+      {item.thumbnailUrl ? (
+        <Image source={{ uri: item.thumbnailUrl }} style={styles.cardImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.cardImage} />
+      )}
       <View style={styles.cardContent}>
         <Text style={styles.courseTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.metaText}>{item.totalLessons} LESSON</Text>
@@ -150,22 +177,19 @@ export default function MyCoursesScreen() {
       ) : (
         <>
           <Tabs />
-          {displayCourses.length === 0 ? (
-            <RenderEmpty />
-          ) : (
-            <FlatList
-              data={displayCourses}
-              keyExtractor={(item: any) => item._id}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => {
-                if (activeTab === 'LEARNING') {
-                  return <RenderLearningCard item={item} />;
-                } else {
-                  return <RenderCompletedCard item={item} />;
-                }
-              }}
-            />
-          )}
+          <FlatList
+            data={displayCourses}
+            keyExtractor={(item: any) => item._id}
+            contentContainerStyle={displayCourses.length === 0 ? styles.emptyListContent : styles.listContent}
+            ListEmptyComponent={<RenderEmpty />}
+            renderItem={({ item }) => {
+              if (activeTab === 'LEARNING') {
+                return <RenderLearningCard item={item} />;
+              } else {
+                return <RenderCompletedCard item={item} />;
+              }
+            }}
+          />
         </>
       )}
     </View>
@@ -179,25 +203,29 @@ const styles = StyleSheet.create({
   headerContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 60, paddingBottom: 16 },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   iconBox: { marginRight: 12 },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#18181B', letterSpacing: -0.5 },
+  headerTitle: { fontSize: 20, fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700', color: '#18181B', letterSpacing: -0.5 },
   headerSubtitle: { fontSize: 10, fontWeight: '600', color: '#71717A', letterSpacing: 1.5, marginTop: 2 },
-  coinBadge: { backgroundColor: '#F3F0E6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
-  coinText: { fontSize: 12, fontWeight: '800', color: '#D97706' },
+  coinBadge: { backgroundColor: '#FFC800', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16 },
+  coinText: { fontSize: 12, fontWeight: '700', color: '#18181B' },
 
   // Tabs
   tabContainer: { flexDirection: 'row', paddingHorizontal: 24, borderBottomWidth: 1, borderBottomColor: '#E4E4E7', marginBottom: 16 },
   tabBtn: { marginRight: 24, paddingBottom: 12, position: 'relative' },
-  tabText: { fontSize: 12, fontWeight: '700', color: '#A1A1AA', letterSpacing: 1 },
+  tabText: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700', color: '#A1A1AA', letterSpacing: 1 },
   tabTextActive: { color: '#18181B' },
-  activeIndicator: { position: 'absolute', bottom: -1, left: 0, width: 24, height: 3, backgroundColor: '#8A6D3B', borderRadius: 2 },
+  activeIndicator: { position: 'absolute', bottom: -1, left: 0, width: 24, height: 3, backgroundColor: '#FFC700', borderRadius: 2 },
 
   listContent: { paddingHorizontal: 24, paddingBottom: 40, gap: 16 },
+  emptyListContent: { flex: 1, paddingHorizontal: 24 },
 
   // Card General
   card: { backgroundColor: '#F4F4F5', borderRadius: 16, padding: 12, flexDirection: 'row', alignItems: 'center' },
   cardImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#18181B' },
   cardContent: { flex: 1, marginLeft: 16, justifyContent: 'center' },
-  courseTitle: { fontSize: 15, fontWeight: '700', color: '#18181B', marginBottom: 4 },
+  courseTitle: { fontSize: 15, fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700', color: '#18181B', marginBottom: 4 },
 
   // Learning Card Specifics
   tagBox: { backgroundColor: '#E4E4E7', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginBottom: 6 },
@@ -214,11 +242,11 @@ const styles = StyleSheet.create({
   badgeSertifikatText: { fontSize: 8, fontWeight: '800', color: '#3F3F46' },
   doneTextSmall: { fontSize: 10, color: '#8A6D3B', fontWeight: '800' },
   badgeCoin: { backgroundColor: '#FEF3C7', alignSelf: 'flex-start', paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeCoinText: { fontSize: 8, fontWeight: '800', color: '#D97706' },
+  badgeCoinText: { fontSize: 10, fontWeight: '700', color: '#B45309' },
 
   // Skeleton Loading
   skeletonContainer: { flex: 1, paddingHorizontal: 24 },
-  skeletonStatus: { fontSize: 10, color: '#A1A1AA', fontWeight: '700', letterSpacing: 1, marginBottom: 16 },
+  skeletonStatus: { fontSize: 10, color: '#A1A1AA', fontFamily: TYPOGRAPHY.h1.fontFamily, fontWeight: '700', letterSpacing: 1, marginBottom: 16 },
   skeletonCard: { backgroundColor: '#F4F4F5', borderRadius: 16, padding: 12, flexDirection: 'row', marginBottom: 16, height: 104 },
   skeletonImage: { width: 80, height: 80, borderRadius: 12, backgroundColor: '#E4E4E7' },
   skeletonLineShort: { height: 12, width: '40%', backgroundColor: '#E4E4E7', borderRadius: 4, marginBottom: 8, marginLeft: 16 },
@@ -230,7 +258,8 @@ const styles = StyleSheet.create({
   emptyIconBox: { width: 80, height: 80, backgroundColor: '#F4F4F5', borderRadius: 20, justifyContent: 'center', alignItems: 'center', marginBottom: 24 },
   gridDots: { width: 32, height: 32, flexDirection: 'row', flexWrap: 'wrap', gap: 4, justifyContent: 'center', alignContent: 'center' },
   dot: { width: 8, height: 8, backgroundColor: '#E4E4E7', borderRadius: 2 },
-  emptyLabel: { fontSize: 12, fontWeight: '700', color: '#3F3F46', letterSpacing: 2 },
+  emptyLabel: { fontSize: 12, fontFamily: TYPOGRAPHY.h1.fontFamily,
+    fontWeight: '700', color: '#3F3F46', letterSpacing: 2 },
   emptyDivider: { fontSize: 14, color: '#A1A1AA', marginVertical: 12, letterSpacing: 4 },
   emptyTitle: { fontSize: 24, fontWeight: '800', color: '#18181B', textAlign: 'center', marginBottom: 32 },
   btnExplore: { backgroundColor: '#FFC800', paddingHorizontal: 24, paddingVertical: 16, borderRadius: 8 },

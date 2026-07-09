@@ -6,12 +6,14 @@ export function useCoin() {
   const user = useQuery(api.users.getCurrentUser);
   const balance = useQuery(api.coins.getCoinBalance);
   const coinHistory = useQuery(api.coins.getCoinHistory);
+  const redeemHistory = useQuery(api.coins.getRedeemHistory);
   const addCoinsMutation = useMutation(api.coins.addCoins);
   const spendCoinsMutation = useMutation(api.coins.spendCoins);
 
   const currentBalance = balance ?? (user?.coinBalance || 0);
-  const loading = balance === undefined || user === undefined;
+  const loading = balance === undefined || user === undefined || redeemHistory === undefined;
   const transactions = coinHistory ?? [];
+  const redeemRequests = redeemHistory ?? [];
 
   const addCoins = async (amount: number, reason: string, type: 'course_complete' | 'quiz_bonus' | 'streak_bonus' = 'quiz_bonus', courseId?: string) => {
     if (!user) throw new Error('User not found');
@@ -54,5 +56,5 @@ export function useCoin() {
     }
   };
 
-  return { balance: currentBalance, loading, transactions, addCoins, spendCoins };
+  return { balance: currentBalance, loading, transactions, redeemHistory: redeemRequests, addCoins, spendCoins };
 }

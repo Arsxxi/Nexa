@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as aiInvestigation from "../aiInvestigation.js";
+import type * as backfillLevels from "../backfillLevels.js";
 import type * as coins from "../coins.js";
 import type * as constants_coinRules from "../constants/coinRules.js";
 import type * as courses from "../courses.js";
@@ -27,6 +29,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiInvestigation: typeof aiInvestigation;
+  backfillLevels: typeof backfillLevels;
   coins: typeof coins;
   "constants/coinRules": typeof constants_coinRules;
   courses: typeof courses;
